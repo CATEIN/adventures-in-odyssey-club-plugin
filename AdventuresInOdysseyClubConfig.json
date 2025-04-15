@@ -4,27 +4,22 @@
 	"author": "CATEIN",
 	"authorUrl": "https://catein.xyz",
 	
-    // The `sourceUrl` field should contain the URL where your plugin will be publically accessible in the future. This allows the app to scan this location to see if there are any updates available.
-	"sourceUrl": "https://yoursite.com/SomeConfig.json",
-	"repositoryUrl": "https://github.com/someuser/someproject",
-	"scriptUrl": "./SomeScript.js",
+	"sourceUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/AdventuresInOdysseyClubConfig.json",
+	"repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/",
+	"scriptUrl": "./AIOScript.js",
 	"version": 1,
 	
-	"iconUrl": "./someimage.png",
+	"iconUrl": "./AIOC.png",
 
-    // The `id` field should be a uniquely generated UUID like from [https://www.uuidgenerator.net/](https://www.uuidgenerator.net/). This will be used to distinguish your plugin from others.
 	"id": "309b2e83-7ede-4af8-8ee9-822bc4647a24",
 	
-    // See the "Script Signing" section for details
 	"scriptSignature": "<omitted>",
 	"scriptPublicKey": "<omitted>",
 
-    // See the "Packages" section for details, currently allowed values are: ["Http", "DOMParser", "Utilities"]
 	"packages": ["Http"],
 	
 	"allowEval": false,
 
-    // The `allowUrls` field is allowed to be `everywhere`, this means that the plugin is allowed to access all URLs. However, this will popup a warning for the user that this is the case. Therefore, it is recommended to narrow the scope of the accessible URLs only to the URLs that you actually need. Other requests will be blocked. During development it can be convenient to use `everywhere`. Possible values are `odysee.com`, `api.odysee.com`, etc.
 	"allowUrls": [
 		"everywhere"
 	]
