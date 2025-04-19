@@ -1,26 +1,24 @@
 {
-	"name": "Adventures in Odyssey Club",
-	"description": "Award-winning, original audio drama series created for ages 8-12 and enjoyed by the whole family.",
-	"author": "CATEIN",
-	"authorUrl": "https://catein.xyz",
-	
-	"sourceUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/AdventuresInOdysseyClubConfig.json",
-	"repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/",
-	"scriptUrl": "./AIOScript.js",
-	"version": 1,
-	
-	"iconUrl": "./AIOC.png",
-
-	"id": "309b2e83-7ede-4af8-8ee9-822bc4647a24",
-	
-	"scriptSignature": "<omitted>",
-	"scriptPublicKey": "<omitted>",
-
-	"packages": ["Http"],
-	
-	"allowEval": false,
-
-	"allowUrls": [
-		"everywhere"
-	]
-}
+    "name": "Adventures in Odyssey Club",
+    "description": "Award‑winning, original audio drama series enjoyed by the whole family.",
+    "author": "CATEIN",
+    "authorUrl": "https://catein.xyz",
+    "sourceUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/AdventuresInOdysseyClubConfig.json",
+    "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/",
+    "scriptUrl": "./AIOScript.js",
+    "version": 1,
+    "iconUrl": "./AIOC.png",
+    "id": "309b2e83-7ede-4af8-8ee9-822bc4647a24",
+    "scriptSignature": "<omitted>",
+    "scriptPublicKey": "<omitted>",
+    "packages": ["Http"],
+    "allowEval": false,
+    "allowUrls": ["everywhere"],
+    "authentication": {
+      "loginUrl": "https://app.adventuresinodyssey.com/signin",
+      "domainHeadersToFind": { 
+        "fotf.my.site.com": ["authorization", "x-viewer-id"]
+      }
+    }
+  }
+  
