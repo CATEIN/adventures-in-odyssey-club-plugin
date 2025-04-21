@@ -18,5 +18,6 @@ Grayjay plugin for https://app.adventuresinodyssey.com/
 |  Home Page | No          | Yet to be implemented             |
 |  Downloads | No          | Grayjay might not have support for setting headers for download links yet            |
 |  Casting | No          | Grayjay might not have support for setting headers for casting yet             |
+|  Comments/Commenting | No          | Commenting might not be possible            |
 |  Chicken Jockey | CHICKEN JOCKEY          | WATER BUCKET, RELEASE!  |
 
