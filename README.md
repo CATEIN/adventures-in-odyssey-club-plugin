@@ -5,7 +5,7 @@ Grayjay plugin for https://app.adventuresinodyssey.com/
 |-------------------------------------|-------------|-----------------------------------|
 | Play Audio/Videos                   | Yes         |                                   |
 | Audio/Video Description | Yes         | Might need more work             |
-|  Club Playlists | No          | Yet to be implemented             |
+|  Club Playlists/Content Groupings | No          | Yet to be implemented             |
 |  Grayjay Playlists | Yes          |   |
 |  Grayjay Queue | Yes          |   |
 | Comics/Badges/Content Pages         | No          | It wont work very good on grayjay but still might be implemented |
