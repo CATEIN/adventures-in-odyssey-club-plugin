@@ -1,4 +1,40 @@
 // AIOScript.js
+const PLATFORM_NAME = "Adventures In Odyssey Club"
+const PLATFORM_LINK = "app.adventuresinodyssey.com"
+
+function formatDescription(desc, authors, characters, airDateRaw, bibleVerse) {
+  let out = desc || "";
+
+  // 1) Air Date
+  if (airDateRaw) {
+    // take "YYYY-MM-DD" before the "T", then swap dashes for slashes
+    const dateOnly = airDateRaw.split("T")[0].replace(/-/g, "/");
+    out += `\n\nAir Date: ${dateOnly}`;
+  }
+
+  // 2) Authors
+  if (Array.isArray(authors) && authors.length) {
+    out += "\n\n" + authors
+      .map(a => `${a.role}: ${a.name}`)
+      .join("\n");
+  }
+
+  // 3) Characters
+  if (Array.isArray(characters) && characters.length) {
+    out += "\n\nCharacters:\n" +
+      characters
+        .map(c => c.name)
+        .join("\n");
+  }
+
+  // 4) Bible Verse
+  if (bibleVerse) {
+    out += `\n\nBible Verse: ${bibleVerse}`;
+  }
+
+  return out;
+}
+
 // Check if a URL is a content details URL
 source.isContentDetailsUrl = function(url) {
     // Check if the URL matches the pattern for AiO content URLs
@@ -23,23 +59,30 @@ source.getContentDetails = function(url) {
       ).body;
       
       const data = JSON.parse(response);
+
+      if (data.type !== "Audio" && data.type !== "Video") {
+        log("Unsupported content type: " + data.type);
+        throw new Error("Content format unsupported: " + data.type);
+      }
+
       log("le url:" + data.download_url);
       
-      return new PlatformVideoDetails({
-        id: new PlatformID("Adventures In Odyssey Club", "rat", contentId),
+      const details =  new PlatformVideoDetails({
+        id: new PlatformID(PLATFORM_NAME, PLATFORM_NAME, contentId),
         thumbnails: new Thumbnails([
-                new Thumbnail(data.thumbnail_medium || "", 128)
+                new Thumbnail(data.thumbnail_medium, 0),
             ]),
         author: new PlatformAuthorLink(
-            new PlatformID("Adventures In Odyssey Club", "rat", contentId), 
-                "Adventures In Odyssey Club", 
-                "app.adventuresinodyssey.com", 
+            new PlatformID(PLATFORM_NAME, PLATFORM_NAME, contentId), 
+                PLATFORM_NAME, 
+                PLATFORM_NAME, 
                 "https://app.adventuresinodyssey.com/icons/Icon-167.png"),
         name: data.short_name,
+        uploadDate: Math.floor(new Date(data.air_date).getTime() / 1000) || Math.floor(new Date(data.last_published_date).getTime() / 1000),
         duration: data.media_length / 1000,
         viewCount: data.views,
         url: url,
-        description: data.description,
+        description: formatDescription(data.description, data.authors, data.characters, data.air_date, data.bible_verse),
         
         video: new VideoSourceDescriptor([
             new VideoUrlSource({
@@ -54,6 +97,36 @@ source.getContentDetails = function(url) {
             })
         ])
     });
+
+    details.getContentRecommendations = function() {
+      // grab album items and recommendations (or empty arrays)
+      const album = data.in_album    || [];
+      const recs  = data.recommendations || [];
+  
+      // merge album → recommendations
+      const combined = album.concat(recs);
+  
+      const videos = combined.map(item => new PlatformVideo({
+        id: new PlatformID(PLATFORM_NAME, PLATFORM_NAME, item.id),
+        name: item.short_name || "Untitled",
+        url: `https://app.adventuresinodyssey.com/content/${item.id}`,
+        thumbnails: new Thumbnails([
+          new Thumbnail(item.thumbnail_small || "", 128)
+        ]),
+        author: new PlatformAuthorLink(
+          new PlatformID(PLATFORM_NAME, PLATFORM_NAME, item.id),
+          PLATFORM_NAME,
+          PLATFORM_NAME,
+          "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+        ),
+        duration: (item.media_length || 0) / 1000,
+        viewCount: item.views || 0
+      }));
+  
+      return new VideoPager(videos, /* hasMore= */ false, /* nextContext= */ null);
+    };
+  
+    return details;
     
     } catch (error) {
       log("Error getting content details: " + error.message);
@@ -76,12 +149,7 @@ source.search = (query, type, order, filters, continuationToken) => {
     const payload = {
         searchTerm: query,
         searchObjects: [
-          { objectName:"Content__c", pageNumber:1, pageSize:9, fields:["Name","Thumbnail_Small__c","Subtype__c","Episode_Number__c"] },
-          { objectName:"Content_Grouping__c", pageNumber:1, pageSize:9, fields:["Name","Image_URL__c","Type__c"] },
-          { objectName:"Topic__c", pageNumber:1, pageSize:9, fields:["Name"] },
-          { objectName:"Author__c", pageNumber:1, pageSize:9, fields:["Name","Profile_Image_URL__c"] },
-          { objectName:"Character__c", pageNumber:1, pageSize:9, fields:["Name","Thumbnail_Small__c"] },
-          { objectName:"Badge__c", pageNumber:1, pageSize:9, fields:["Name","Icon__c","Type__c"] }
+          { objectName:"Content__c", pageNumber:1, pageSize:9, fields:["Name","Thumbnail_Small__c","Subtype__c","media_length__c"] }
         ]
       };
 
@@ -105,21 +173,21 @@ source.search = (query, type, order, filters, continuationToken) => {
       for (const rec of section.results || []) {
         videos.push(new PlatformVideo({
             id: new PlatformID(
-                "Adventures In Odyssey Club",
+                PLATFORM_NAME,
                 rec.id,
                 rec.id
             ),
             name: rec.column1?.value || "Untitled",
+            url: `https://app.adventuresinodyssey.com/content/${rec.id}`,
             thumbnails: new Thumbnails([
                 new Thumbnail(rec.column2?.value || "", 128)
             ]),
-            url: `https://app.adventuresinodyssey.com/content/${rec.id}`,
             author: new PlatformAuthorLink(
-                new PlatformID("Adventures In Odyssey Club", "rat", rec.id), 
-                "Adventures In Odyssey Club", 
-                "app.adventuresinodyssey.com", 
+                new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id), 
+                PLATFORM_NAME, 
+                PLATFORM_LINK, 
                 "https://app.adventuresinodyssey.com/icons/Icon-167.png"),
-            duration: 0,
+            duration: rec.column4?.value / 1000,
             viewCount: 0
         }));
       }
@@ -129,5 +197,13 @@ source.search = (query, type, order, filters, continuationToken) => {
   } catch (e) {
     log("Search failed: " + e.message);
     return new VideoPager([], false, null);
+  }
+};
+
+source.isChannelUrl = function(url) {
+  try {
+    return new URL(url).hostname.toLowerCase() === "app.adventuresinodyssey.com";
+  } catch (e) {
+    return false;
   }
 };
