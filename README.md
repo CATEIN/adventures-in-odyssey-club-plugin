@@ -14,7 +14,7 @@ Grayjay plugin for https://app.adventuresinodyssey.com/
 |  Sharing/Reciving Timestamp in link | No          | Yet to be implemented             |
 |  Search | Partially          | Cant load more results yet             |
 |  Search Filters | No          | Yet to be implemented             |
-|  Subscribing | Yes          | The clubs API is so anoyying cuz              |
+|  Subscribing | Yes          | The clubs API is so anoyying cuz no upload date is given              |
 |  Home Page | Partially          | Need to add albums as playlists             |
 |  Downloads | No          | Grayjay might not have support for setting headers for download links yet            |
 |  Casting | No          | Grayjay might not have support for setting headers for casting yet             |
