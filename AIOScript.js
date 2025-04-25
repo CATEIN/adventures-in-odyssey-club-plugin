@@ -1,6 +1,14 @@
 // AIOScript.js
 const PLATFORM_NAME = "Adventures In Odyssey Club"
 const PLATFORM_LINK = "app.adventuresinodyssey.com"
+const BANNER_URL = "https://www.adventuresinodyssey.com/wp-content/uploads/whits-end-adventures-in-odyssey.jpg"
+
+const ACCESS_TOKEN_URL = "https://fotf.my.site.com/aio/services/oauth2/token";
+
+const local_http = http;
+let local_settings;
+let local_state;
+
 
 let config = {};
 
@@ -114,6 +122,7 @@ source.getContentDetails = function(url) {
       const videos = combined.map(item => new PlatformVideo({
         id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
         name: item.short_name || "Untitled",
+        uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000),
         url: `https://app.adventuresinodyssey.com/content/${item.id}`,
         thumbnails: new Thumbnails([
           new Thumbnail(item.thumbnail_small || "", 128)
@@ -154,7 +163,8 @@ source.search = (query, type, order, filters, continuationToken) => {
     const payload = {
         searchTerm: query,
         searchObjects: [
-          { objectName:"Content__c", pageNumber:1, pageSize:20, fields:["Name","Thumbnail_Small__c","Subtype__c","media_length__c"] }
+          { objectName:"Content__c", pageNumber:1, pageSize:20, fields:["Name","Thumbnail_Small__c","Subtype__c","media_length__c"]
+           }
         ]
       };
 
@@ -216,22 +226,16 @@ source.getChannel = function(url) {
     throw new ScriptException(`Invalid channel URL: ${url}`);
   }
 
-  log("hello?");
-
   return new PlatformChannel({
     id: new PlatformID(
       PLATFORM_NAME,
-      url,
-      config.id
-  ),
+      PLATFORM_LINK,
+      config.id),
     name: "Adventures In Odyssey Club",
+    description: "Cool audio drama",
     url:  url,
-    thumbnails: new Thumbnails([
-      new Thumbnail(
-        "https://app.adventuresinodyssey.com/icons/Icon-167.png",
-        128
-      )
-    ])
+    banner: BANNER_URL,
+    thumbnail: "https://app.adventuresinodyssey.com/icons/Icon-167.png"
   });
 };
 
@@ -247,51 +251,150 @@ class AIOChannelPager extends ChannelPager {
 
 
 source.getChannelContents = function(
+  url, type, order, filters, continuationToken
 ) {
+  const page = continuationToken?.pageNumber || 1;
+  // fetch & build videos + totalPages
+  const { videos, totalPages } = fetchEpisodeHomePage(page);
+  // hasMore if we haven’t reached the last page
+  const hasMore = page < totalPages;
+  // context passed into nextPage
+  const context = { url, type, order, filters, pageNumber: page };
+  return new AIOChannelVideoPager(videos, hasMore, context);
+};
+
+// 2) Subclass VideoPager so Grayjay knows how to load page N+1
+class AIOChannelVideoPager extends VideoPager {
+  constructor(results, hasMore, context) {
+    super(results, hasMore, context);
+  }
+  nextPage() {
+    // call back into our source with the saved context
+    return source.getChannelContents(
+      this.context.url,
+      this.context.type,
+      this.context.order,
+      this.context.filters,
+      { pageNumber: this.context.pageNumber + 1 }
+    );
+  }
+}
+
+// 3) Helper to fetch one page from your contentgrouping/search API
+function fetchEpisodeHomePage(pageNumber) {
+  const payload = {
+    community:  "Adventures in Odyssey",
+    pageNumber: String(pageNumber),
+    pageSize:   "1",
+    type:       "Episode Home",
+    orderby:    "Order__c DESC NULLS LAST"
+  };
+
+  const resp = http.POST(
+    "https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search",
+    JSON.stringify(payload),
+    {
+      "x-experience-name": "Adventures In Odyssey",
+      "Content-Type":      "application/json"
+    },
+    true
+  ).body;
+
+  const data = JSON.parse(resp);
+  // grab metadata for total pages
+  const totalPages = Number(data.metadata?.totalPageCount || 1);
+  // newest-first: API gives oldest first within the page, so reverse
+  const list = (data.contentGroupings?.[0]?.contentList || []).reverse();
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const videos = list.map(item => new PlatformVideo({
+    id:         new PlatformID("Adventures In Odyssey Club", item.id, item.id),
+    name:       item.name || item.short_name || "Untitled",
+    url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
+    thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small||"",128) ]),
+    author:     new PlatformAuthorLink(
+                  new PlatformID("Adventures In Odyssey Club", item.id, item.id),
+                  "Adventures In Odyssey Club",
+                  "app.adventuresinodyssey.com",
+                  "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+                ),
+    duration:   (item.media_length||0)/1000,
+    viewCount:  item.views||0
+  }));
+
+  return { videos, totalPages };
+}
+
+class AIOCommentPager extends CommentPager {
+  constructor(results, hasMore, context) {
+    super(results, hasMore, context);
+  }
+  nextPage() {
+    // ask for the next pageNumber
+    return source.getComments(
+      this.context.url,
+      { pageNumber: this.context.pageNumber + 1 }
+    );
+  }
+}
+
+source.getComments = function(url, continuationToken) {
   try {
-    // hit the content-grouping search endpoint just once
+    const contentId  = url.split("/").pop();
+    const pageNumber = continuationToken?.pageNumber || 1;
+
     const payload = {
-      community:  "Adventures in Odyssey",
-      pageNumber: "1",
-      pageSize:   "5",
-      type:       "Episode Home",
-      orderby:    "Order__c DESC NULLS LAST"
+      orderBy:     "CreatedDate DESC",
+      pageSize:    10,
+      pageNumber:  pageNumber,
+      relatedToId: contentId
     };
 
+    // POST to comment/search endpoint :contentReference[oaicite:0]{index=0}
     const resp = http.POST(
-      "https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search",
+      "https://fotf.my.site.com/aio/services/apexrest/v1/comment/search",
       JSON.stringify(payload),
-      { "x-experience-name": "Adventures In Odyssey",
-        "Content-Type": "application/json"
-       },
+      {
+        "x-experience-name": "Adventures In Odyssey",
+        "Content-Type":      "application/json"
+      },
       true
     ).body;
+
     const data = JSON.parse(resp);
 
-    // pull the first grouping’s list
-    const list = (data.contentGroupings?.[0]?.contentList) || [];
+    const totalPages = Number(data.metadata?.totalPageCount || 1);
+    const commentsJson = data.comments || [];
 
-    // map to PlatformVideo
-    const vids = list.map(item => new PlatformVideo({
-      id:         new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-      name:       item.name || item.short_name || "Untitled",
-      url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
-      thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small||"",128) ]),
-      author:     new PlatformAuthorLink(
-                    new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-                    "Adventures In Odyssey Club",
-                    "app.adventuresinodyssey.com",
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                  ),
-      duration:   (item.media_length||0)/1000,
-      viewCount:  item.views||0
-    }));
+    const comments = commentsJson.map(c => {
+      const author = new PlatformAuthorLink(
+        new PlatformID("AIOClub", c.viewerProfileId||"", c.viewerProfileId||""),
+        c.userName       || "",
+        url,
+        c.userProfilePicture || ""
+      );
+      const dateSec = Math.floor(new Date(c.createdDateTimestamp).getTime()/1000);
 
-    // return single‐page pager (hasMore=false)
-    return new ChannelPager(vids, false);
+      return new Comment({
+        contextUrl: url,
+        author:     author,
+        message:    c.message       || "",
+        rating:     new RatingLikes(c.numberOfLikes||0),
+        date:       dateSec,
+        replyCount: c.numberOfComments||0,
+        // carry both contentId and parent commentId into context
+        context:    { claimId: contentId, commentId: c.id, pageNumber }
+      });
+    });
+
+    const hasMore = pageNumber < totalPages;
+    return new AIOCommentPager(comments, hasMore, { url, pageNumber });
   }
   catch (e) {
-    log("getChannelContents error: " + e.message);
-    return new ChannelPager([], false);
+    log("getComments failed: " + e.message);
+    return new AIOCommentPager([], false, { url, pageNumber: 1 });
   }
 };
+
+source.getSubComments = function(comment) {
+}
