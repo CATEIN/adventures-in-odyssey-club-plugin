@@ -7,6 +7,7 @@ Grayjay plugin for https://app.adventuresinodyssey.com/
 | Play Radio Episodes                   | No         |   Need to implement fetching radio episodes    |
 | Audio/Video Description | Yes         | Might need more work             |
 | Reccomendations/In Album                  | Yes        |   Fully Functional       |
+|  Like/Favourite Content | No          | Yet to be implemented             |
 |  Club Playlists/Content Groupings | No          | Yet to be implemented             |
 |  Grayjay Playlists | Yes          |   |
 |  Grayjay Queue | Yes          |   |
