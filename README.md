@@ -1,5 +1,5 @@
 # Adventures in Odyssey Club Grayjay Plugin
-Grayjay plugin for https://app.adventuresinodyssey.com/
+Grayjay plugin for https://app.adventuresinodyssey.com/.
 I couldnt figure out how to sign the script so the qr code dont work
 also you cant logout and the plugin will eventually "brick" itself cuz it doesnt get a new auth token. The fix i found is just to remove the auth header, inject the plugin and log out from the web view. then put the auth header back
 
