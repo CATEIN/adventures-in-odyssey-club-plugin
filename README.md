@@ -1,6 +1,8 @@
 # Adventures in Odyssey Club Grayjay Plugin
 Grayjay plugin for https://app.adventuresinodyssey.com/
 
+https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png?raw=true
+
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
 | Play Audio/Videos                   | Yes         |   Episodes dont display cover art                                |
