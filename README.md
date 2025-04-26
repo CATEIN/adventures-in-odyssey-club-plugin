@@ -1,7 +1,7 @@
 # Adventures in Odyssey Club Grayjay Plugin
 Grayjay plugin for https://app.adventuresinodyssey.com/
 
-https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png?raw=true
+![image](https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png)
 
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
