@@ -8,7 +8,7 @@
     "scriptUrl": "./AIOScript.js",
     "version": 1,
     "iconUrl": "./AIOC.png",
-    "id": "309b2e83-7ede-4af8-8ee9-822bc4647a24",
+    "id": "adventures-in-odyssey",
     "scriptSignature": "IdWd4Q3tt2kdQOVIMbtMYtFbwSeMS993b9OUY+G65FxFMkF2PuaE2OPj8pq6JATHz7MGq8vNvmqN3JipJKnYbKu6A0E5bchm9R15GCPKFYWfaP8qWPhkaN+4NMmPJ13/b6qFh4caLRab2lW/dulQAf6euopYVEIBJyP2zebVFeZDGLDYRGoeDCFZk5zM0rnzxftPCp0s2RX03Yp/IuDT7I1Ctl2Z/rBf9l4j7YdyQQUSgE+qzu9jyk1jUKC6By4lPvgm4psmtutr+a31RJS19yxOHyidRodDYfPlv/2W7lQ2dzYjSdYiRNz0SasP4WmBWAAjrJ/IRw9ivSfX86so8a3/0oul5pQHoMhyJ3iJHYYq3scA3z0dZyHleGyg88X6e0F2ODGs5NZEmIgFThS6j0kf2kmRB+GYZbuQJbQ0SZbAZPXstB3TpCrRySHx7QTrm84eqER6YV6By42YQgnQcZqeNiaQdxyTlJmpBzo9nfZiom8kf2dx+fZBm0nOaV44",
     "scriptPublicKey": "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1fDmvO6Kvq+zpf99eecvRcOE7ZOPHfKGdxvILj3snmkKtFqhpBfgIcbgitUUKBcPYlX31JMWyFxLdCnGmP6Kn28gOrDCJWSxAaMydUsnDRG9thnQU7e5pKsE5MaSMm/JWz0yI1sqtRgNYRe/OYtq7b7vLt8mK310ZNKCMyzEIuSeirlP6ZgnaLDceJy4zjGWCJbJUlppvLaV1KctSFBd/leaxHWTLjGyBrPKRqeKnjLfKv4L5HogKEKsuO3146mWW90WjTs0Ew6Xkvhqof9hkg1gpoIOa+FYQ/hLfV8MYwlU94tsZmSL2vPAGo8lQ7XjwOoCH412UFd+ZE1g2MqL7qaXQ8RXinJF4lHLF/zdwz7mMQIZwohp5eWUMbE4TNTtOgsXP5YxKfdELojByO2zYlKMts7bI5VlmqST5v3eOrARqICtUdk+t8ecuMbyucxBXRuINaBzl5vK/BFq4YUP+a6PDLABJBORXVQXm5YxsWFDHc44cC9pMwj9s7WTZaaxAgMBAAE=",
     "packages": ["Http"],
