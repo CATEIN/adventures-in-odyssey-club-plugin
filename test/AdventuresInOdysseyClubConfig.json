@@ -4,7 +4,7 @@
     "author": "CATEIN",
     "authorUrl": "https://catein.xyz",
     "sourceUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/test/AdventuresInOdysseyClubConfig.json",
-    "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/",
+    "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/test",
     "scriptUrl": "./AIOScript.js",
     "version": 1,
     "iconUrl": "./AIOC.png",
