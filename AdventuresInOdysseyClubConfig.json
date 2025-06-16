@@ -1,24 +1,35 @@
 {
-    "name": "Adventures in Odyssey Club",
-    "description": "Award‑winning, original audio drama series enjoyed by the whole family.",
+    "name": "Adventures in Odyssey Club (Alpha)",
+    "description": "Subscription service for the award-winning, original audio drama series enjoyed by the whole family.",
     "author": "CATEIN",
     "authorUrl": "https://catein.xyz",
-    "sourceUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/AdventuresInOdysseyClubConfig.json",
-    "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin/",
+    "sourceUrl": "https://adventuresinodyssey.fans/test/AdventuresInOdysseyClubConfig.json",
+    "repositoryUrl": "https://adventuresinodyssey.fans/test/",
     "scriptUrl": "./AIOScript.js",
-    "version": 1,
+    "version": 2,
     "iconUrl": "./AIOC.png",
-    "id": "309b2e83-7ede-4af8-8ee9-822bc4647a24",
-    "scriptSignature": "<omitted>",
-    "scriptPublicKey": "<omitted>",
+    "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
+    "scriptSignature": "",
+    "scriptPublicKey": "",
     "packages": ["Http"],
     "allowEval": false,
     "allowUrls": ["everywhere"],
     "authentication": {
       "loginUrl": "https://app.adventuresinodyssey.com/signin",
       "domainHeadersToFind": { 
-        "fotf.my.site.com": ["authorization", "x-viewer-id"]
-      }
+        "fotf.my.site.com": ["Authorization", "x-viewer-id", "x-pin"]
+      },
+      "cookiesToFind": ["idccsrf"]
+    },
+    "changelog": {
+        "1" : [
+            "Hi Jonny and Kevin. If you recived this message, I have successfully updated the plugin. If you are not Jonny or Kevin... hello",
+            "Audio now displays a thumbnail.",
+            "contentGroupings should now work as playlists",
+            "maybe a slightly better search",
+            "Upload date now appears on subscriptions"
+        ]
     }
+
   }
   
