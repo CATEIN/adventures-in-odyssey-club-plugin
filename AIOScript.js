@@ -10,27 +10,11 @@ const aioheaders = {
 };
 
 let local_settings;
-let local_state;
+var config = {}
 
-
-let config = {};
-
-source.enable = function (conf) {
-
-}
-
-class AIORequestModifier extends RequestModifier {
-  constructor() {
-    super();
-  }
-
-  modifyRequest(url, headers) {
-    // Add or override headers as needed
-    headers["Sec-Fetch-Dest"] = "audio";
-    headers["Range"] = "-"; // Only add if required
-
-    return { url, headers };
-  }
+source.enable = function (conf, settings) {
+  config = conf ?? {}
+  local_settings = settings
 }
 
 function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) {
@@ -63,25 +47,24 @@ function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) 
   }
 }
 
-
-function formatDescription(desc, authors, characters, airDateRaw, bibleVerse) {
+function formatDescription(desc, authors, characters, airDateRaw, bibleVerse, devotional) {
   let out = desc || "";
 
-  // 1) Air Date
+  // 1 Air Date
   if (airDateRaw) {
     // take "YYYY-MM-DD" before the "T", then swap dashes for slashes
     const dateOnly = airDateRaw.split("T")[0].replace(/-/g, "/");
     out += `\n\nAir Date: ${dateOnly}`;
   }
 
-  // 2) Authors
+  // 2 Authors
   if (Array.isArray(authors) && authors.length) {
     out += "\n\n" + authors
       .map(a => `${a.role}: ${a.name}`)
       .join("\n");
   }
 
-  // 3) Characters
+  // 3 Characters
   if (Array.isArray(characters) && characters.length) {
     out += "\n\nCharacters:\n" +
       characters
@@ -89,12 +72,64 @@ function formatDescription(desc, authors, characters, airDateRaw, bibleVerse) {
         .join("\n");
   }
 
-  // 4) Bible Verse
+  // 4 Bible Verse
   if (bibleVerse) {
     out += `\n\nBible Verse: ${bibleVerse}`;
   }
 
+  // 5 Devotional
+  if (devotional) {
+    out += `\n\nDevotional: ${devotional}`
+  }
+
   return out;
+}
+
+
+function getAirDateFromRelativeLabel(label) {
+  const today = new Date();
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  if (label === "Aired Today") {
+    return new Date(today);
+  }
+
+  const match = label.match(/^Aired (Last )?(\w+)$/);
+  if (!match) return null;
+
+  const hasLast = !!match[1]; // true if "Last" is present
+  const dayName = match[2];
+  const targetWeekday = dayNames.indexOf(dayName);
+  if (targetWeekday === -1) return null;
+
+  const currentWeekday = today.getDay();
+  let daysAgo = (7 + currentWeekday - targetWeekday) % 7;
+
+  if (hasLast) {
+    // "Last [Day]" means the most recent occurrence of that day in the past
+    if (daysAgo === 0) {
+      daysAgo = 7; // if today is the target day, go back one week
+    }
+    // Otherwise, daysAgo already gives us the most recent past occurrence
+  } else {
+    // "Aired [Day]" means the most recent occurrence of that day
+    if (daysAgo === 0) {
+      daysAgo = 7; // if today is the target day, assume it means last week (not today)
+    }
+  }
+
+  const airDate = new Date(today);
+  airDate.setDate(today.getDate() - daysAgo);
+  return airDate;
+}
+
+function isEpisodeFree(relativeAirDay) {
+  const airDate = getAirDateFromRelativeLabel(relativeAirDay);
+  if (!airDate) return false;
+
+  const today = new Date();
+  const ageInDays = (today - airDate) / (1000 * 60 * 60 * 24);
+  return ageInDays <= 6;
 }
 
 // Check if a URL is a content details URL
@@ -112,14 +147,41 @@ source.getContentDetails = function(url) {
   // Extract the content ID from the URL
   const contentId = url.split('/').pop();
   log("Fetching content ID: " + contentId);
-  
-  const data = fetchWithErrorHandling(
-     `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`,
-     aioheaders
-  );
+  log("Randomizer? " + local_settings.fetchRandomEpisode);
+
+  // Check if user is logged in and construct appropriate URL
+  let apiUrl;
+  if (bridge.isLoggedIn()) {
+    // User is logged in - use the original URL
+    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
+  } else {
+    // User is not logged in - use the alternative URL with radio_page_type
+    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true&radio_page_type=aired`;
+  }
+
+  let data = fetchWithErrorHandling(apiUrl, aioheaders);
 
   if (data.type !== "Audio" && data.type !== "Video") {
     log("Unsupported content type: " + data.type);
+  }
+
+  // Check if user is not logged in and episode requires login
+  if (!bridge.isLoggedIn()) {
+    const relativeAirDay = data.relative_air_day;
+    log("Relative air day: " + relativeAirDay);
+    
+    // Check if it's a podcast (always free)
+    if (data.subtype === "Podcast") {
+      log("Podcast detected - making additional request");
+      data = fetchWithErrorHandling(`https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`, aioheaders);
+    } else {
+      const isFreeEpisode = relativeAirDay ? isEpisodeFree(relativeAirDay) : false;
+      const hasSecretAccess = local_settings.secretVariable === true;
+      
+      if (!isFreeEpisode && !hasSecretAccess) {
+          throw new LoginRequiredException("Login to listen to this episode");
+      }
+    }
   }
 
   // Create the appropriate source descriptor based on content type
@@ -173,34 +235,65 @@ source.getContentDetails = function(url) {
     duration: data.media_length / 1000,
     viewCount: data.views,
     url: url,
-    description: formatDescription(data.description, data.authors, data.characters, data.air_date, data.bible_verse),
+    description: formatDescription(data.description, data.authors, data.characters, data.air_date, data.bible_verse, data.devotional),
     video: sourceDescriptor
   });
 
   details.getContentRecommendations = function() {
-    const album = data.in_album || [];
+    const album = data.in_album?.content_list || data.in_album || [];
     const recs = data.recommendations || [];
     const combined = album.concat(recs);
-
-    const videos = combined.map(item => new PlatformVideo({
-      id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-      name: item.short_name || "Untitled",
-      uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000),
-      url: `https://app.adventuresinodyssey.com/content/${item.id}`,
-      thumbnails: new Thumbnails([
-        new Thumbnail(item.thumbnail_small || "", 128)
-      ]),
-      author: new PlatformAuthorLink(
-        new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-        PLATFORM_NAME,
-        PLATFORM_LINK,
-        "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-      ),
-      duration: (item.media_length || 0) / 1000,
-      viewCount: item.views || 0
-    }));
-
-    return new VideoPager(videos, /* hasMore= */ false, /* nextContext= */ null);
+  
+    const videos = [];
+  
+    if (local_settings.fetchRandomEpisode && bridge.isLoggedIn()) {
+      const randomData = fetchWithErrorHandling(
+        "https://fotf.my.site.com/aio/services/apexrest/v1/content/random",
+        aioheaders
+      );
+  
+      // Add only the random episode (no in_album or recommendations)
+      videos.push(new PlatformVideo({
+        id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
+        name: "🎲 Random Episode",
+        url: `https://app.adventuresinodyssey.com/content/${randomData.id}`,
+        thumbnails: new Thumbnails([
+          new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
+        ]),
+        author: new PlatformAuthorLink(
+          new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
+          PLATFORM_NAME,
+          PLATFORM_LINK,
+          "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+        ),
+        duration: 0,
+        viewCount: 0
+        // No uploadDate to keep it mysterious
+      }));
+    }
+  
+    // Add this episode's album/recommendations
+    for (const item of combined) {
+      videos.push(new PlatformVideo({
+        id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
+        name: item.short_name || "Untitled",
+        url: `https://app.adventuresinodyssey.com/content/${item.id}`,
+        uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000),
+        thumbnails: new Thumbnails([
+          new Thumbnail(item.thumbnail_small || "", 128)
+        ]),
+        author: new PlatformAuthorLink(
+          new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
+          PLATFORM_NAME,
+          PLATFORM_LINK,
+          "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+        ),
+        duration: (item.media_length || 0) / 1000,
+        viewCount: item.views || 0
+      }));
+    }
+  
+    return new VideoPager(videos, false, null);
   };
 
   return details;
@@ -296,7 +389,6 @@ source.search = (query) => {
       ]
     };
 
-    // Use the fetchWithErrorHandling function
     const data = fetchWithErrorHandling(
       "https://fotf.my.site.com/aio/services/apexrest/v1/search",
       aioheaders,
@@ -305,7 +397,6 @@ source.search = (query) => {
     );
 
     log("Search response received successfully");
-    log(JSON.stringify(data, null, 2));
 
     const convertToPlatform = function (rec, section) {
       switch (section.objectName) {
@@ -342,7 +433,7 @@ source.search = (query) => {
     }
 
     // Combine with playlists first
-    const results = [...playlists, ...videos];
+    const results = [...videos, ...playlists];
 
     log(`Final results: ${results.length} total items (${playlists.length} playlists, ${videos.length} videos) from search`);
     
@@ -414,13 +505,54 @@ source.getChannel = function(url) {
     id: new PlatformID(
       PLATFORM_NAME,
       PLATFORM_LINK,
-      config.id),
+      PLATFORM_LINK),
     name: "Adventures In Odyssey Club",
     description: "Cool audio drama",
     url:  url,
     banner: BANNER_URL,
     thumbnail: "https://app.adventuresinodyssey.com/icons/Icon-167.png"
   });
+};
+
+source.getChannelContents = function(url, type, order, filters, continuationToken) {
+  const page = continuationToken?.pageNumber || 1;
+
+  let result;
+  let isLoggedIn;
+
+  try {
+    isLoggedIn = bridge.isLoggedIn();
+    log("bridge.isLoggedIn(): " + isLoggedIn);
+
+    if (isLoggedIn) {
+      log("Fetching Club episodes");
+      result = fetchEpisodeHomePage(page);
+    } else {
+      log("Fetching Free episodes");
+      result = fetchFreeEpisodes(page);
+    }
+  } catch (e) {
+    log("Error during isLoggedIn check or fetch: " + e);
+    result = fetchFreeEpisodes(page);
+  }
+
+  const { videos, totalPages } = result;
+  const hasMore = page < totalPages;
+  const context = { url, type, order, filters, pageNumber: page };
+  return new AIOChannelVideoPager(videos, hasMore, context);
+};
+
+source.getChannelPlaylists = function(
+  url, type, filters, continuationToken
+) {
+  const page = continuationToken?.pageNumber || 1;
+  // Fetch and build playlists + totalPages
+  const { playlists, totalPages } = fetchAlbumsPage(page);
+  // Determine if more pages exist
+  const hasMore = page < totalPages;
+  // Context for continuation
+  const context = { url, type, filters, pageNumber: page };
+  return new AIOChannelPlaylistPager(playlists, hasMore, context);
 };
 
 class AIOChannelPager extends ChannelPager {
@@ -433,21 +565,6 @@ class AIOChannelPager extends ChannelPager {
 	}
 }
 
-
-source.getChannelContents = function(
-  url, type, order, filters, continuationToken
-) {
-  const page = continuationToken?.pageNumber || 1;
-  // fetch & build videos + totalPages
-  const { videos, totalPages } = fetchEpisodeHomePage(page);
-  // hasMore if we haven’t reached the last page
-  const hasMore = page < totalPages;
-  // context passed into nextPage
-  const context = { url, type, order, filters, pageNumber: page };
-  return new AIOChannelVideoPager(videos, hasMore, context);
-};
-
-// 2) Subclass VideoPager so Grayjay knows how to load page N+1
 class AIOChannelVideoPager extends VideoPager {
   constructor(results, hasMore, context) {
     super(results, hasMore, context);
@@ -460,6 +577,23 @@ class AIOChannelVideoPager extends VideoPager {
       this.context.order,
       this.context.filters,
       { pageNumber: this.context.pageNumber + 1 }
+    );
+  }
+}
+
+class AIOChannelPlaylistPager extends PlaylistPager {
+  constructor(results, hasMore, context) {
+    super(results, hasMore, context);
+  }
+  nextPage() {
+    // Create continuation token with incremented page number
+    const continuationToken = { pageNumber: this.context.pageNumber + 1 };
+    
+    return source.getChannelPlaylists(
+      this.context.url,
+      this.context.type,
+      this.context.filters,
+      continuationToken  // Pass as 4th parameter, not 5th
     );
   }
 }
@@ -484,7 +618,7 @@ function fetchEpisodeHomePage(pageNumber) {
 
   const videos = list.map(item => new PlatformVideo({
     id:         new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-    name:       item.name || item.short_name || "Untitled",
+    name:       item.short_name || item.name || "Untitled",
     url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
     thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small||"",128) ]),
     author:     new PlatformAuthorLink(
@@ -501,6 +635,73 @@ function fetchEpisodeHomePage(pageNumber) {
   return { videos, totalPages };
 }
 
+function fetchFreeEpisodes(pageNumber) {
+  const data = fetchWithErrorHandling(
+    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?content_type=Audio&content_subtype=Episode&community=Adventures+In+Odyssey&orderby=Recent_Air_Date__c+DESC&pagenum=${pageNumber}&pagecount=25&radio_page_type=aired`,
+    aioheaders,
+    "GET"
+  );
+
+  const totalPages = 1;
+
+  // No sorting — assume server sends in correct order, just slice top 5
+  const list = (data.results || []).slice(0, 5);
+
+  const videos = list.map(item => new PlatformVideo({
+    id:         new PlatformID("Adventures In Odyssey Club", item.id, item.id),
+    name:       "FREE: " + (item.name || item.short_name || "Untitled"),
+    url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
+    thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
+    author:     new PlatformAuthorLink(
+                  new PlatformID("Adventures In Odyssey Club", item.id, item.id),
+                  "Adventures In Odyssey Club",
+                  "app.adventuresinodyssey.com",
+                  "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+                ),
+    uploadDate: Math.floor(new Date(item.recent_air_date || item.air_date || 0).getTime() / 1000),
+    duration:   (item.media_length || 0) / 1000,
+    viewCount:  item.views || 0
+  }));
+
+  return { videos, totalPages };
+}
+
+function fetchAlbumsPage(pageNumber) {
+  const payload = {
+    community:  "Adventures in Odyssey",
+    pageNumber: pageNumber,
+    pageSize:   25,
+    type:       "Album"
+  };
+
+  const data = fetchWithErrorHandling(
+    "https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search",
+    aioheaders,
+    "POST",
+    payload
+  );
+
+  const totalPages = Number(data.metadata?.totalPageCount || 1);
+  const list = data.contentGroupings || [];
+
+  const playlists = list.map(album => new PlatformPlaylist({
+    id: new PlatformID(PLATFORM_NAME, album.id, album.id),
+    author: new PlatformAuthorLink(
+      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, album.id), 
+      PLATFORM_NAME, 
+      PLATFORM_LINK, 
+      "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+    ),
+    name: album.name || album.album_name || "Untitled Album",
+    description: album.description || "",
+    thumbnail: album.imageURL || "",
+    url: `https://app.adventuresinodyssey.com/contentGroup/${album.id}`,
+    videoCount: album.contentList ? album.contentList.length : 0
+  }));
+
+  return { playlists, totalPages };
+}
+
 class AIOCommentPager extends CommentPager {
   constructor(results, hasMore, context) {
     super(results, hasMore, context);
@@ -513,7 +714,7 @@ class AIOCommentPager extends CommentPager {
     );
   }
 }
-
+  
 const badgeIdCache = {};
 
 source.getComments = function(url, continuationToken) {
