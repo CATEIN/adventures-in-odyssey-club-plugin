@@ -3,6 +3,8 @@ Grayjay plugin for https://app.adventuresinodyssey.com/.
 Still in development...
 try it here: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json
 
+![qr code](https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png?raw=true)
+
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
 | Play Audio/Videos                   | Yes         |   Episode art is cropped cuz of grayjay                             |
