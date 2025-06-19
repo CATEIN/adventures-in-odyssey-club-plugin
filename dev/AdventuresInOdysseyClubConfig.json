@@ -1,0 +1,41 @@
+{
+    "name": "Adventures in Odyssey Club (Dev)",
+    "description": "Subscription service for the award-winning, original audio drama series enjoyed by the whole family.",
+    "author": "CATEIN",
+    "authorUrl": "https://catein.xyz",
+    "sourceUrl": "",
+    "repositoryUrl": "",
+    "scriptUrl": "./AIOScript.js",
+    "version": 1,
+    "iconUrl": "./AIOC.png",
+    "id": "5466862f-2743-4b64-8327-1901e05aad8f",
+    "scriptSignature": "",
+    "scriptPublicKey": "",
+    "packages": ["Http"],
+    "allowEval": false,
+    "allowUrls": ["fotf.my.site.com"],
+    "authentication": {
+      "loginUrl": "https://app.adventuresinodyssey.com/signin",
+      "domainHeadersToFind": { 
+        "fotf.my.site.com": ["Authorization", "x-viewer-id"]
+      }
+    },
+    "subscriptionRateLimit": 2,
+    "settings": [
+        {
+            "variable": "fetchRandomEpisode",
+            "name": "Randomizer via Recommended",
+            "description": "Puts a random episode at the top of recommendations (Recommendations may take longer to load)",
+            "type": "Boolean",
+            "default": "false"
+        },    
+        {
+          "variable": "secretVariable",
+          "name": "Enable Experimental Ambient Playback Rerouting",
+          "description": "Only enable if you are not logged in",
+          "type": "Boolean",
+          "default": "false"
+      }
+      ]
+  }
+  
