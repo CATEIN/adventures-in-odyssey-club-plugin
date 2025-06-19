@@ -22,7 +22,7 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 |  Search | Partially          | Cant load more results yet      |
 |  Search Filters | No          | Yet to be implemented             |
 |  Subscribing | Yes          |           |
-|  Home Page | Partially          |    Yet to be implemented        |
+|  Home Page | No          |    Yet to be implemented        |
 |  Downloads | No          | Gives 401 error            |
 |  Casting | No          | Gives 401 error            |
 | View Comments | Yes          |           |
