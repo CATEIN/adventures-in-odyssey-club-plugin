@@ -1,8 +1,7 @@
 # Adventures in Odyssey Club Grayjay Plugin
 Grayjay plugin for https://app.adventuresinodyssey.com/.
 Still in development...
-try the alpha here: https://adventuresinodyssey.fans/test/AdventuresInOdysseyClubConfig.json
-
+try it here: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json
 
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
