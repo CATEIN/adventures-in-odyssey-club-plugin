@@ -31,7 +31,7 @@ function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) 
   // Check if response is not ok
   if (!response.isOk) {
       if (response.code === 401) {
-          throw new LoginRequiredException("Auth token expired. Login to fetch a new token.");
+          throw new ScriptLoginRequiredException("Auth token expired. Login to fetch a new token.");
       }
       throw new Error(`HTTP Error ${response.code}: ${response.statusMessage || 'Request failed'}`);
   }
@@ -179,7 +179,7 @@ source.getContentDetails = function(url) {
       const hasSecretAccess = local_settings.secretVariable === true;
       
       if (!isFreeEpisode && !hasSecretAccess) {
-          throw new LoginRequiredException("Login to listen to this episode");
+          throw new ScriptLoginRequiredException("Login to listen to this episode");
       }
     }
   }
