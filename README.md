@@ -26,7 +26,6 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 |  Downloads | No          | Gives 401 error            |
 |  Casting | No          | Gives 401 error            |
 | View Comments | Yes          |           |
-| View Comment Replies | No          | Yet to be implemented  |
+| View Comment Replies | Yes          |   |
 | Comment | No         |  No grayjay support yet         |
-|  Chicken Jockey | CHICKEN JOCKEY          | WATER BUCKET, RELEASE!  |
 
