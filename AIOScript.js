@@ -3,6 +3,8 @@ const PLATFORM_NAME = "Adventures In Odyssey Club"
 const PLATFORM_LINK = "app.adventuresinodyssey.com"
 const BANNER_URL = "https://www.adventuresinodyssey.com/wp-content/uploads/whits-end-adventures-in-odyssey.jpg"
 
+const commentIdCache = {};
+
 const aioheaders = {
   "Content-Type": "application/json",
   "Accept": "application/json",
@@ -601,7 +603,7 @@ class AIOChannelPlaylistPager extends PlaylistPager {
 function fetchEpisodeHomePage(pageNumber) {
 
   const data = fetchWithErrorHandling(
-    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?type=Audio&has_devotional=true&community=Adventures+In+Odyssey&orderby=Order__c+DESC&pagenum=${pageNumber}&pagecount=25&player=true`,
+    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?type=Audio&has_devotional=true&community=Adventures+In+Odyssey&orderby=Order__c+DESC&pagenum=${pageNumber}&pagecount=30&player=true`,
     aioheaders, 
     "GET"
   );
@@ -702,6 +704,48 @@ function fetchAlbumsPage(pageNumber) {
   return { playlists, totalPages };
 }
 
+/**
+ * Comment class specific to AIO with reply handling (based off how BitChute does it https://gitlab.futo.org/videostreaming/plugins/bitchute/-/blob/master/BitchuteScript.js?ref_type=heads)
+ */
+class AIOComment extends Comment {
+  constructor(obj) {
+    super(obj);
+    this.replies = obj.replies || [];
+  }
+
+  getReplies() {
+    if (this.replies.length > 0) {
+      return new AIOReplyPager(this.replies);
+    } else {
+      return new AIOReplyPager([]);
+    }
+  }
+}
+
+/**
+ * Pager for AIO comment replies (when replies are pre-loaded)
+ */
+class AIOReplyPager extends CommentPager {
+  constructor(allResults, pageSize = 40) {
+    const end = Math.min(pageSize, allResults.length);
+    const results = allResults.slice(0, end);
+    const hasMore = pageSize < allResults.length;
+    super(results, hasMore, {});
+
+    this.offset = end;
+    this.allResults = allResults;
+    this.pageSize = pageSize;
+  }
+
+  nextPage() {
+    const end = Math.min(this.offset + this.pageSize, this.allResults.length);
+    this.results = this.allResults.slice(this.offset, end);
+    this.offset = end;
+    this.hasMore = end < this.allResults.length;
+    return this;
+  }
+}
+
 class AIOCommentPager extends CommentPager {
   constructor(results, hasMore, context) {
     super(results, hasMore, context);
@@ -714,46 +758,133 @@ class AIOCommentPager extends CommentPager {
     );
   }
 }
+
+function findCommentPage(contentId) {
+  const cacheKey = `${contentId}`;
   
-const badgeIdCache = {};
+  // Check cache first
+  if (commentIdCache[cacheKey]) {
+    log(`Using cached comment page data for ${contentId}: targetId=${commentIdCache[cacheKey].targetId}`);
+    return commentIdCache[cacheKey].targetId;
+  }
 
-source.getComments = function(url, continuationToken) {
+  log(`Searching for album containing content ID: ${contentId}`);
+  
+  // Search for albums that contain this content ID
+  const albumSearchPayload = {
+    community: "Adventures in Odyssey",
+    pageNumber: 1,
+    pageSize: 50,
+    type: "Album"
+  };
+  
   try {
-    const contentId = url.split("/").pop();
-    const pageNumber = continuationToken?.pageNumber || 1;
-
-    let targetId = contentId;
-    let hasDirectComments = true;
-
-    // Check if we already have cached data for this content
-    const cacheKey = `${contentId}`;
-    if (badgeIdCache[cacheKey]) {
-      targetId = badgeIdCache[cacheKey].targetId;
-      hasDirectComments = badgeIdCache[cacheKey].hasDirectComments;
-      log(`Using cached data for ${contentId}: targetId=${targetId}, hasDirectComments=${hasDirectComments}`);
-    } else {
-      // First time - fetch content details to check comment availability
-      const contentData = fetchWithErrorHandling(
-        `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`,
-        aioheaders
-      );
-
-      // Check if comments are enabled directly on this content
-      hasDirectComments = contentData.enable_commenting || contentData.disable_comment_posting;
+    const albumSearchData = fetchWithErrorHandling(
+      "https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search",
+      aioheaders,
+      "POST",
+      albumSearchPayload
+    );
+    
+    const albumResults = albumSearchData.contentGroupings;
+    if (!albumResults || albumResults.length === 0) {
+      log(`No albums found in search results`);
+      return null;
+    }
+    
+    // Find the album that contains this content ID
+    let matchingAlbum = null;
+    for (const album of albumResults) {
+      // Check if this album's contentList contains the content ID (using startsWith for partial match)
+      if (album.contentList && album.contentList.some(content => content.id && content.id.startsWith(contentId))) {
+        matchingAlbum = album;
+        break;
+      }
+    }
+    
+    if (!matchingAlbum) {
+      log(`No album found containing content ID: ${contentId}, trying direct content fetch for badge search`);
       
-      if (!hasDirectComments) {
-      // No direct comments, search for badge using short_name
-      const shortName = contentData.short_name;
+      // Fetch content data for badge search
+      try {
+        const contentData = fetchWithErrorHandling(
+          `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`,
+          aioheaders
+        );
+        
+        const shortName = contentData.short_name;
+        if (!shortName) {
+          log("No short_name found in content data for badge search");
+          return null;
+        }
+        
+        const cleanedName = shortName.replace(/^#\d+:\s*/, '');
+        log(`Searching for badge with cleaned name from content data: ${cleanedName}`);
+        
+        const badgeSearchPayload = {
+          searchTerm: cleanedName,
+          searchObjects: [{
+            objectName: "Badge__c",
+            pageNumber: 1,
+            pageSize: 50,
+            fields: ["Name", "Icon__c", "Type__c"]
+          }]
+        };
+        
+        const badgeSearchData = fetchWithErrorHandling(
+          "https://fotf.my.site.com/aio/services/apexrest/v1/search",
+          aioheaders,
+          "POST",
+          badgeSearchPayload
+        );
+        
+        const badgeResults = badgeSearchData.resultObjects?.[0]?.results;
+        if (!badgeResults || badgeResults.length === 0) {
+          log(`No badge found for search term: ${cleanedName}`);
+          return null;
+        }
+        
+        const commentPageId = badgeResults[0].id;
+        log(`Found badge comment page ID from content data: ${commentPageId}`);
+        
+        // Cache the result
+        commentIdCache[cacheKey] = {
+          targetId: commentPageId,
+          hasDirectComments: false
+        };
+        log(`Cached badge comment page data for ${contentId}: targetId=${commentPageId}`);
+        
+        return commentPageId;
+      } catch (e) {
+        log(`Content fetch and badge search failed: ${e.message}`);
+        return null;
+      }
+    }
+    
+    const albumName = matchingAlbum.name;
+    log(`Found album: ${albumName} containing content ID: ${contentId}`);
+    
+    // Check if this album contains the ½ symbol (indicating it's a badge)
+    if (albumName && albumName.includes('½')) {
+      log(`Album contains ½ symbol, treating as badge: ${albumName}`);
+      
+      // Find the specific content item to get its short_name (using startsWith for partial match)
+      const contentItem = matchingAlbum.contentList.find(content => content.id && content.id.startsWith(contentId));
+      let shortName = contentItem ? contentItem.short_name : null;
+      
+      // If short_name is not available, try to derive it from the album name
       if (!shortName) {
-        log("No short_name found for badge search");
-        return new AIOCommentPager([], false, { url, pageNumber: 1 });
+        shortName = albumName.replace(/^#\d+:\s*/, '');
       }
       
-      // Clean the short_name by removing number prefix like "#1011: "
+      if (!shortName) {
+        log("No short_name available for badge search");
+        return null;
+      }
+      
       const cleanedName = shortName.replace(/^#\d+:\s*/, '');
       log(`Searching for badge with cleaned name: ${cleanedName}`);
       
-      // Search for badge using the cleaned name
       const badgeSearchPayload = {
         searchTerm: cleanedName,
         searchObjects: [{
@@ -764,75 +895,167 @@ source.getComments = function(url, continuationToken) {
         }]
       };
       
-      const badgeSearchData = fetchWithErrorHandling(
-        "https://fotf.my.site.com/aio/services/apexrest/v1/search",
-        aioheaders,
-        "POST",
-        badgeSearchPayload
-      );
-      
-      // Extract badge ID from search results
-      const badgeResults = badgeSearchData.resultObjects?.[0]?.results;
-      if (!badgeResults || badgeResults.length === 0) {
-        log(`No badge found for search term: ${cleanedName}`);
-        return new AIOCommentPager([], false, { url, pageNumber: 1 });
+      try {
+        const badgeSearchData = fetchWithErrorHandling(
+          "https://fotf.my.site.com/aio/services/apexrest/v1/search",
+          aioheaders,
+          "POST",
+          badgeSearchPayload
+        );
+        
+        const badgeResults = badgeSearchData.resultObjects?.[0]?.results;
+        if (!badgeResults || badgeResults.length === 0) {
+          log(`No badge found for search term: ${cleanedName}`);
+          return null;
+        }
+        
+        const commentPageId = badgeResults[0].id;
+        log(`Found badge comment page ID: ${commentPageId}`);
+        
+        // Cache the result
+        commentIdCache[cacheKey] = {
+          targetId: commentPageId,
+          hasDirectComments: false
+        };
+        log(`Cached badge comment page data for ${contentId}: targetId=${commentPageId}`);
+        
+        return commentPageId;
+      } catch (e) {
+        log(`Badge search failed: ${e.message}`);
+        return null;
       }
+    } else {
+      // This is a regular album
+      const commentPageId = matchingAlbum.id;
+      log(`Found album comment page ID: ${commentPageId}`);
       
-        // Use the first badge result
-        const badgeId = badgeResults[0].id;
-        targetId = badgeId;
-        log(`Found badge ID: ${badgeId}`);
-      }
-      
-      // Cache the results for future pagination
-      badgeIdCache[cacheKey] = {
-        targetId: targetId,
-        hasDirectComments: hasDirectComments
+      // Cache the result
+      commentIdCache[cacheKey] = {
+        targetId: commentPageId,
+        hasDirectComments: false
       };
-      log(`Cached data for ${contentId}: targetId=${targetId}, hasDirectComments=${hasDirectComments}`);
+      log(`Cached album comment page data for ${contentId}: targetId=${commentPageId}`);
+      
+      return commentPageId;
+    }
+  } catch (e) {
+    log(`Album search failed: ${e.message}`);
+    return null;
+  }
+}
+
+source.getComments = function(url, continuationToken) {
+  if (!bridge.isLoggedIn()) {
+    throw new ScriptException("Login to view comments");
+  }
+
+  try {
+    const contentId = url.split("/").pop();
+    const pageNumber = continuationToken?.pageNumber || 1;
+    let targetId = contentId;
+    let hasDirectComments = true;
+    const commentsSize = [10, 20, 30, 40, 50][local_settings.commentPageSize] || 20;
+
+    // Check cache first to see if we already know the comment page ID
+    const cacheKey = `${contentId}`;
+    if (commentIdCache[cacheKey]) {
+      targetId = commentIdCache[cacheKey].targetId;
+      hasDirectComments = commentIdCache[cacheKey].hasDirectComments;
+      log(`Using cached data for ${contentId}: targetId=${targetId}, hasDirectComments=${hasDirectComments}, pageSize=${commentsSize}`);
     }
 
-    // Fetch comments using either contentId or badgeId
-    const payload = {
+    // Fetch comments with the target ID (either original contentId or cached comment page ID)
+    let payload = {
       orderBy: "CreatedDate DESC",
-      pageSize: 10,
+      pageSize: commentsSize,
       pageNumber: pageNumber,
       relatedToId: targetId
     };
 
-    const data = fetchWithErrorHandling(
+    let data = fetchWithErrorHandling(
       "https://fotf.my.site.com/aio/services/apexrest/v1/comment/search",
       aioheaders,
       "POST",
       payload
     );
 
-    const totalPages = Number(data.metadata?.totalPageCount || 1);
-    const commentsJson = data.comments || [];
+    // If no comments found and we haven't tried finding a comment page yet, try to find one
+    if ((!data.comments || data.comments.length === 0) && !commentIdCache[cacheKey]) {
+      log(`No direct comments found for ${contentId}, searching for comment page`);
+      
+      // Use the modified findCommentPage function with just the contentId
+      const commentPageId = findCommentPage(contentId);
+      if (!commentPageId) {
+        return new AIOCommentPager([], false, { url, pageNumber: 1 });
+      }
 
-    const comments = commentsJson.map(c => {
+      targetId = commentPageId;
+      hasDirectComments = false;
+
+      // Fetch comments again with the comment page ID
+      payload.relatedToId = targetId;
+      data = fetchWithErrorHandling(
+        "https://fotf.my.site.com/aio/services/apexrest/v1/comment/search",
+        aioheaders,
+        "POST",
+        payload
+      );
+    }
+
+    const totalPages = Number(data.metadata?.totalPageCount || 1);
+    const allComments = data.comments || [];
+
+    const comments = allComments.map(c => {
       const author = new PlatformAuthorLink(
-        new PlatformID(PLATFORM_NAME, c.viewerProfileId||"", c.viewerProfileId||""),
+        new PlatformID(PLATFORM_NAME, c.viewerProfileId || "", c.viewerProfileId || ""),
         c.userName || "",
         url,
         c.userProfilePicture || ""
       );
-      const dateSec = Math.floor(new Date(c.createdDateTimestamp).getTime()/1000);
-
-      return new Comment({
+      const dateSec = Math.floor(new Date(c.createdDateTimestamp).getTime() / 1000);
+    
+      // Map embedded replies (if any)
+      const replies = (c.comments || []).map(reply => {
+        const replyAuthor = new PlatformAuthorLink(
+          new PlatformID(PLATFORM_NAME, reply.viewerProfileId || "", reply.viewerProfileId || ""),
+          reply.userName || "",
+          url,
+          reply.userProfilePicture || ""
+        );
+        const replyDateSec = Math.floor(new Date(reply.createdDateTimestamp).getTime() / 1000);
+    
+        return new AIOComment({
+          contextUrl: url,
+          author: replyAuthor,
+          message: reply.message || "",
+          rating: new RatingLikes(reply.numberOfLikes || 0),
+          date: replyDateSec,
+          replyCount: 0,
+          context: {
+            claimId: contentId,
+            commentId: reply.id,
+            parentId: c.id,
+            searchType: hasDirectComments ? 'direct' : 'badge',
+            searchId: targetId
+          },
+          replies: []
+        });
+      });
+    
+      return new AIOComment({
         contextUrl: url,
         author: author,
         message: c.message || "",
-        rating: new RatingLikes(c.numberOfLikes||0),
+        rating: new RatingLikes(c.numberOfLikes || 0),
         date: dateSec,
-        replyCount: c.numberOfComments||0,
-        context: { 
-          claimId: contentId, 
-          commentId: c.id, 
-          pageNumber,
+        replyCount: c.numberOfComments || 0,
+        context: {
+          claimId: contentId,
+          commentId: c.id,
           searchType: hasDirectComments ? 'direct' : 'badge',
           searchId: targetId
-        }
+        },
+        replies: replies
       });
     });
 

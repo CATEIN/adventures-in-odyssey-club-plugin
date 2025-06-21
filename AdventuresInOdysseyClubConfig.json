@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 4,
+    "version": 5,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -31,6 +31,20 @@
             "default": "false"
         },
         {
+          "variable": "commentPageSize",
+          "name": "Comment page size",
+          "description": "Set how many comments to load on each request. Higher might be slower",
+          "type": "Dropdown",
+          "default": "1",
+          "options": [
+            "10 (the club uses this)",
+            "20",
+            "30",
+            "40",
+            "50"
+          ]
+        }, 
+        {
           "variable": "secretVariable",
           "name": "Enable Experimental Ambient Playback Rerouting",
           "description": "Only enable if you are not logged in",
@@ -39,6 +53,13 @@
       }
       ],
     "changelog": {
+        "5" : [
+            "Comment Update!",
+            "Finding comments should now use less requests",
+            "Replies now show up",
+            "Added setting for comment page size",
+            "Increased EpisodeHomePage size to 30 instead of 25"
+        ],
         "4" : [
             "No longer using allowUrls: everywhere",
             "Renamed the plugin to Adventures in Odyssey Club"
