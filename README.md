@@ -1,7 +1,7 @@
 # Adventures in Odyssey Club Grayjay Plugin
 Grayjay plugin for https://app.adventuresinodyssey.com/.
 
-Still in development...
+Still in development but mostly functional...
 
 Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json
 
@@ -10,11 +10,12 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
 | Play Audio/Videos                   | Yes         |   Episode art is cropped cuz of grayjay                             |
-| Play Radio Episodes                   | yes         |       |
+| Play Radio Episodes                   | Yes         |       |
 | Audio/Video Description | Yes         |             |
 | Reccomendations/In Album                  | Yes        |   Fully Functional       |
 | Randomizer                 | Yes        |   via setting      |
 |  Club Playlists/Content Groupings |Yes        |           |
+|  Themes | No       |  Yet to be implemented         |
 |  Grayjay Playlists | Yes          |   |
 |  Grayjay Queue | Yes          |   |
 | Comics     | No          | Might be implemented... |
