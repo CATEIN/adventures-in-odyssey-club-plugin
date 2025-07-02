@@ -137,17 +137,22 @@ function isEpisodeFree(relativeAirDay) {
 // Check if a URL is a content details URL
 source.isContentDetailsUrl = function(url) {
     // Check if the URL matches the pattern for AiO content URLs
-    return url.startsWith('https://app.adventuresinodyssey.com/content/');
+    return url.startsWith('https://app.adventuresinodyssey.com/content/') ||
+           url.startsWith('https://app.adventuresinodyssey.com/video?');
   };
 
 source.isPlaylistUrl = function(url) {
-  return url.startsWith('https://app.adventuresinodyssey.com/contentGroup/');
+  return url.startsWith('https://app.adventuresinodyssey.com/contentGroup/') ||
+           url.startsWith('https://app.adventuresinodyssey.com/themes/');
 };
   
 // Get content details from a URL
 source.getContentDetails = function(url) {
   // Extract the content ID from the URL
-  const contentId = url.split('/').pop();
+  const contentId = url.startsWith('https://app.adventuresinodyssey.com/video?') 
+        ? new URLSearchParams(url.split('?')[1]).get('id')
+        : url.split('/').pop();
+
   log("Fetching content ID: " + contentId);
   log("Randomizer? " + local_settings.fetchRandomEpisode);
 
@@ -244,7 +249,21 @@ source.getContentDetails = function(url) {
   details.getContentRecommendations = function() {
     const album = data.in_album?.content_list || data.in_album || [];
     const recs = data.recommendations || [];
-    const combined = album.concat(recs);
+    
+    // Handle extras - try both possible structures
+    let extrasArray = [];
+    if (data.extras?.content_list && Array.isArray(data.extras.content_list)) {
+        extrasArray = data.extras.content_list;
+    } else if (Array.isArray(data.extras)) {
+        extrasArray = data.extras;
+    }
+    
+    // Filter extras to only include Audio or Video types
+    const extras = extrasArray.filter(item => {
+        return item.type === "Audio" || item.type === "Video";
+    });
+    
+    const combined = extras.concat(album).concat(recs);
   
     const videos = [];
   
@@ -274,13 +293,13 @@ source.getContentDetails = function(url) {
       }));
     }
   
-    // Add this episode's album/recommendations
+    // Add this episode's album/recommendations/extras
     for (const item of combined) {
       videos.push(new PlatformVideo({
         id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-        name: item.short_name || "Untitled",
+        name: item.name || item.short_name || "Untitled",
         url: `https://app.adventuresinodyssey.com/content/${item.id}`,
-        uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000),
+        uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000) || 0,
         thumbnails: new Thumbnails([
           new Thumbnail(item.thumbnail_small || "", 128)
         ]),
@@ -305,19 +324,35 @@ source.getPlaylist = function(url) {
   const contentGroupId = url.split('/').pop();
   log("Fetching playlist ID: " + contentGroupId);
 
-  const data = fetchWithErrorHandling(
-    `https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/${contentGroupId}`,
-    aioheaders
-  );
+  // Check if this is a theme URL or regular content group
+  const isTheme = url.includes('/themes/');
+  const apiEndpoint = isTheme 
+    ? `https://fotf.my.site.com/aio/services/apexrest/v1/topic/${contentGroupId}`
+    : `https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/${contentGroupId}`;
 
-  const grouping = Array.isArray(data.contentGroupings) && data.contentGroupings[0]
-    ? data.contentGroupings[0]
-    : {};
+  const data = fetchWithErrorHandling(apiEndpoint, aioheaders);
 
-  const playlistTitle = grouping.name || `Playlist ${contentGroupId}`;
-  const rawList = Array.isArray(grouping.contentList) ? grouping.contentList : [];
+  let grouping = {};
+  let rawList = [];
+  let playlistTitle = `Playlist ${contentGroupId}`;
 
-  // 1) Parse the copyright year, defaulting to current year if missing/invalid
+  if (isTheme) {
+    // Handle theme data structure
+    const topic = Array.isArray(data.topics) && data.topics[0] ? data.topics[0] : {};
+    grouping = topic;
+    rawList = Array.isArray(topic.recommendations) ? topic.recommendations : [];
+    playlistTitle = topic.name || `Theme ${contentGroupId}`;
+    log("Theme data - name: " + topic.name + ", recommendations count: " + rawList.length);
+  } else {
+    // Handle regular content group data structure
+    grouping = Array.isArray(data.contentGroupings) && data.contentGroupings[0]
+      ? data.contentGroupings[0]
+      : {};
+    rawList = Array.isArray(grouping.contentList) ? grouping.contentList : [];
+    playlistTitle = grouping.name || `Playlist ${contentGroupId}`;
+  }
+
+  // Parse the copyright year, defaulting to current year if missing/invalid
   const yearNum = parseInt(grouping.album_copyright_year, 10);
   const baseDate = new Date(
     isNaN(yearNum) ? new Date().getFullYear() : yearNum,
@@ -340,7 +375,6 @@ source.getPlaylist = function(url) {
       name:       item.short_name || item.name,
       thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
       author:     author,
-      // 2) Use the January 1st timestamp of the album's copyright year:
       uploadDate: uploadTimestamp,
       duration:   (item.media_length || 0) / 1000,
       viewCount:  item.views || 0,
@@ -353,7 +387,7 @@ source.getPlaylist = function(url) {
     url:        url,
     name:       playlistTitle,
     videoCount: contents.length,
-    thumbnail:  grouping.imageURL || "",
+    thumbnail:  grouping.imageURL || grouping.thumbnail_medium || "",
     contents:   new ContentPager(contents, false)
   });
 };
@@ -603,7 +637,7 @@ class AIOChannelPlaylistPager extends PlaylistPager {
 function fetchEpisodeHomePage(pageNumber) {
 
   const data = fetchWithErrorHandling(
-    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?type=Audio&has_devotional=true&community=Adventures+In+Odyssey&orderby=Order__c+DESC&pagenum=${pageNumber}&pagecount=30&player=true`,
+    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?community=Adventures+In+Odyssey&orderby=Last_Published_Date__c+DESC+NULLS+LAST&pagenum=${pageNumber}&pagecount=25&has_devotional=true&player=true`,
     aioheaders, 
     "GET"
   );
@@ -982,10 +1016,12 @@ source.getComments = function(url, continuationToken) {
     // If no comments found and we haven't tried finding a comment page yet, try to find one
     if ((!data.comments || data.comments.length === 0) && !commentIdCache[cacheKey]) {
       log(`No direct comments found for ${contentId}, searching for comment page`);
+      bridge.log(`No direct comments found for ${contentId}, searching for comment page`);
       
       // Use the modified findCommentPage function with just the contentId
       const commentPageId = findCommentPage(contentId);
       if (!commentPageId) {
+        bridge.log("No comment page found.");
         return new AIOCommentPager([], false, { url, pageNumber: 1 });
       }
 

@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 5,
+    "version": 6,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -53,6 +53,13 @@
       }
       ],
     "changelog": {
+        "6" : [
+            "Small lil update",
+            "Changed EpisodeHomePage API url to one the club might like better",
+            "Loading comments might show toast messages when searching for a page maybe?",
+            "Added themes support - issue #2 on github",
+            "Added weird video URL support - issue #3 on github"
+        ],
         "5" : [
             "Comment Update!",
             "Finding comments should now use less requests",
