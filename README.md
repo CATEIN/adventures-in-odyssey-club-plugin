@@ -15,7 +15,7 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 | Reccomendations/In Album                  | Yes        |   Fully Functional       |
 | Randomizer                 | Yes        |   via setting      |
 |  Club Playlists/Content Groupings |Yes        |           |
-|  Themes | No       |  Yet to be implemented         |
+|  Themes | Yes       |  Yet to be implemented         |
 |  Grayjay Playlists | Yes          |   |
 |  Grayjay Queue | Yes          |   |
 | Comics     | No          | Might be implemented... |
