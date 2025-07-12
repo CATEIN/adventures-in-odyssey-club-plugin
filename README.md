@@ -25,7 +25,8 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 |  Subscribing | Yes          |           |
 |  Home Page | No          |    Yet to be implemented        |
 |  Downloads | No          | Gives 401 error            |
-|  Casting | No          | Gives 401 error            |
+|  F Cast | No          | Gives 401 error            |
+|  Chromecast | Yes          |             |
 | View Comments | Yes          |           |
 | View Comment Replies | Yes          |   |
 | Comment | No         |  No grayjay support yet         |
