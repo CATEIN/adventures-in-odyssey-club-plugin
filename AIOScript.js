@@ -138,6 +138,7 @@ function isEpisodeFree(relativeAirDay) {
 source.isContentDetailsUrl = function(url) {
     // Check if the URL matches the pattern for AiO content URLs
     return url.startsWith('https://app.adventuresinodyssey.com/content/') ||
+           url.startsWith('https://app.adventuresinodyssey.com/badges/') ||
            url.startsWith('https://app.adventuresinodyssey.com/video?');
   };
 
@@ -148,25 +149,51 @@ source.isPlaylistUrl = function(url) {
   
 // Get content details from a URL
 source.getContentDetails = function(url) {
+
+  let data;
+
   // Extract the content ID from the URL
   const contentId = url.startsWith('https://app.adventuresinodyssey.com/video?') 
         ? new URLSearchParams(url.split('?')[1]).get('id')
         : url.split('/').pop();
+        
 
   log("Fetching content ID: " + contentId);
   log("Randomizer? " + local_settings.fetchRandomEpisode);
 
-  // Check if user is logged in and construct appropriate URL
-  let apiUrl;
-  if (bridge.isLoggedIn()) {
-    // User is logged in - use the original URL
-    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
+  // Check if it's a badges URL
+  if (url.startsWith('https://app.adventuresinodyssey.com/badges/')) {
+    if (!bridge.isLoggedIn()) {
+      throw new ScriptLoginRequiredException("Login to listen to this episode");
+    }
+    
+    const badgeApiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/badge/${contentId}`;
+    const badgeData = fetchWithErrorHandling(badgeApiUrl, aioheaders);
+    
+    // Extract contentToCompleteId from the first requirement and use it as the new contentId
+    if (badgeData.badges && badgeData.badges.length > 0 && 
+        badgeData.badges[0].requirements && badgeData.badges[0].requirements.length > 0) {
+      const newContentId = badgeData.badges[0].requirements[0].contentToCompleteId;
+      
+      // Now fetch the actual content using the contentToCompleteId
+      const apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${newContentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
+      data = fetchWithErrorHandling(apiUrl, aioheaders);
+    } else {
+      throw new Error("Invalid badge data structure");
+    }
   } else {
-    // User is not logged in - use the alternative URL with radio_page_type
-    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true&radio_page_type=aired`;
-  }
+    // Regular content handling
+    let apiUrl;
+    if (bridge.isLoggedIn()) {
+      // User is logged in - use the original URL
+      apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
+    } else {
+      // User is not logged in - use the alternative URL with radio_page_type
+      apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?tag=true&series=true&recommendations=true&player=true&parent=true&radio_page_type=aired`;
+    }
 
-  let data = fetchWithErrorHandling(apiUrl, aioheaders);
+    data = fetchWithErrorHandling(apiUrl, aioheaders);
+  }
 
   if (data.type !== "Audio" && data.type !== "Video") {
     log("Unsupported content type: " + data.type);
@@ -204,7 +231,7 @@ source.getContentDetails = function(url) {
           requestModifier: {
             headers: {
               "Sec-Fetch-Dest": "audio",
-              "range": "-"
+              "range": "-",
             }
           }
         })
@@ -218,7 +245,7 @@ source.getContentDetails = function(url) {
         url: data.download_url,
         requestModifier: {
           headers: {
-            "Sec-Fetch-Dest": "audio",
+            "Sec-Fetch-Dest": "video",
             "range": "-"
           }
         }
@@ -497,7 +524,7 @@ function toPlatformPlaylist(rec) {
     name: rec.column1?.value || "Untitled",
     thumbnail: rec.column2?.value || "",
     author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, "aio"), 
+      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id), 
       PLATFORM_NAME, 
       PLATFORM_LINK, 
       "https://app.adventuresinodyssey.com/icons/Icon-167.png"
@@ -508,6 +535,10 @@ function toPlatformPlaylist(rec) {
 }
 
 function toPlatformVideo(rec) {
+  const baseUrl = rec.column3?.value === "Adventure" 
+    ? "https://app.adventuresinodyssey.com/badges/" 
+    : "https://app.adventuresinodyssey.com/content/";
+    
   return new PlatformVideo({
     id: new PlatformID(
       PLATFORM_NAME,
@@ -515,15 +546,15 @@ function toPlatformVideo(rec) {
       rec.id
     ),
     name: rec.column1?.value || "Untitled",
-    url: `https://app.adventuresinodyssey.com/content/${rec.id}`,
+    url: `${baseUrl}${rec.id}`,
     thumbnails: new Thumbnails([
       new Thumbnail(rec.column2?.value || "", 128)
     ]),
     author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id), 
-      PLATFORM_NAME, 
-      PLATFORM_LINK, 
-      "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id),
+       PLATFORM_NAME,
+       PLATFORM_LINK,
+       "https://app.adventuresinodyssey.com/icons/Icon-167.png"
     ),
     duration: rec.column4?.value ? Math.floor(rec.column4.value / 1000) : 0,
     viewCount: 0
@@ -637,7 +668,7 @@ class AIOChannelPlaylistPager extends PlaylistPager {
 function fetchEpisodeHomePage(pageNumber) {
 
   const data = fetchWithErrorHandling(
-    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?community=Adventures+In+Odyssey&orderby=Last_Published_Date__c+DESC+NULLS+LAST&pagenum=${pageNumber}&pagecount=25&has_devotional=true&player=true`,
+    `https://fotf.my.site.com/aio/services/apexrest/v1/content/search?content_subtype=Episode&community=Adventures+In+Odyssey&orderby=Last_Published_Date__c+DESC+NULLS+LAST&pagenum=${pageNumber}&pagecount=30&player=true`,
     aioheaders, 
     "GET"
   );
