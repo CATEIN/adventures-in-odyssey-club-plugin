@@ -20,7 +20,7 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 |  Grayjay Queue | Yes          |   |
 | Comics     | No          | Might be implemented... |
 |  Sharing/Reciving Timestamp in link | No          | Idk if this is possible...             |
-|  Search | Partially          | Cant load more results yet      |
+|  Search | Yes          | only as good as the club search      |
 |  Search Filters | No          | Yet to be implemented             |
 |  Subscribing | Yes          |           |
 |  Home Page | No          |    Yet to be implemented        |
