@@ -17,6 +17,7 @@ var config = {}
 source.enable = function (conf, settings) {
   config = conf ?? {}
   local_settings = settings
+  
 }
 
 function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) {
@@ -144,6 +145,7 @@ source.isContentDetailsUrl = function(url) {
 
 source.isPlaylistUrl = function(url) {
   return url.startsWith('https://app.adventuresinodyssey.com/contentGroup/') ||
+           url.startsWith('https://app.adventuresinodyssey.com/playlists/') ||
            url.startsWith('https://app.adventuresinodyssey.com/themes/');
 };
   
@@ -242,7 +244,9 @@ source.getContentDetails = function(url) {
     sourceDescriptor = new VideoSourceDescriptor([
       new VideoUrlSource({
         name: data.short_name,
-        url: data.download_url,
+        url: (data.stream_url && data.download_url && data.stream_url.length > data.download_url.length)
+          ? data.stream_url 
+          : data.download_url,
         requestModifier: {
           headers: {
             "Sec-Fetch-Dest": "video",
@@ -408,6 +412,7 @@ source.getPlaylist = function(url) {
       url:        `https://app.adventuresinodyssey.com/content/${item.link_to_id}`
     }));
 
+    log(grouping.imageURL);
   return new PlatformPlaylistDetails({
     id:         new PlatformID(PLATFORM_NAME, PLATFORM_NAME, contentGroupId),
     author:     author,
@@ -425,7 +430,38 @@ source.getSearchCapabilities = () => ({
   filters:[ ]
 });
 
-source.search = (query) => {
+function rankResults(items, query) {
+  const lowerQuery = query.toLowerCase();
+
+  return items.sort((a, b) => {
+    const aTitle = (a.name || "").toLowerCase();
+    const bTitle = (b.name || "").toLowerCase();
+
+    // Exact match → highest priority
+    const aExact = aTitle === lowerQuery;
+    const bExact = bTitle === lowerQuery;
+    if (aExact && !bExact) return -1;
+    if (bExact && !aExact) return 1;
+
+    // Title contains query (at start is better than in middle)
+    const aIndex = aTitle.indexOf(lowerQuery);
+    const bIndex = bTitle.indexOf(lowerQuery);
+
+    if (aIndex !== -1 && bIndex === -1) return -1;
+    if (bIndex !== -1 && aIndex === -1) return 1;
+
+    if (aIndex !== -1 && bIndex !== -1) {
+      // Earlier occurrence is better
+      if (aIndex < bIndex) return -1;
+      if (bIndex < aIndex) return 1;
+    }
+
+    // Fallback: keep original order
+    return 0;
+  });
+}
+
+source.search = (query, type, page, filter) => {
   try {
     // Build payload with larger page size
     const payload = {
@@ -435,7 +471,7 @@ source.search = (query) => {
           objectName: "Content__c",
           pageNumber: 1,
           pageSize: 30,
-          fields: ["Name", "Thumbnail_Small__c", "Subtype__c", "media_length__c"]
+          fields: ["Name", "Thumbnail_Small__c", "Subtype__c", "Episode_Number__c"]
         },
         {
           objectName: "Content_Grouping__c",
@@ -463,49 +499,60 @@ source.search = (query) => {
 
     const convertToPlatform = function (rec, section) {
       switch (section.objectName) {
-        case "Content_Grouping__c": {
+        case "Content_Grouping__c":
           return toPlatformPlaylist(rec);
-        }
-        case "Content__c": {
+        case "Badge__c":
+        case "Content__c":
+        default:
           return toPlatformVideo(rec);
-        }
-        default: {
-          return toPlatformVideo(rec); // Default to video for other types
-        }
       }
     };
 
-    // Process all results into mixed array
+    // Separate results
     const playlists = [];
     const videos = [];
-    
+    const badges = [];
+
     for (const section of data.resultObjects || []) {
       log(`Processing section: ${section.objectName} with ${section.results?.length || 0} results`);
-      
+
       for (const rec of section.results || []) {
         const platformItem = convertToPlatform(rec, section);
-        
+
         if (section.objectName === "Content_Grouping__c") {
           playlists.push(platformItem);
+        } else if (section.objectName === "Badge__c") {
+          badges.push(platformItem);
         } else {
           videos.push(platformItem);
         }
-        
+
         log(`Added ${section.objectName}: ${platformItem.name}`);
       }
     }
 
-    // Combine with playlists first
-    const results = [...videos, ...playlists];
+    // Decide what to return based on type
+    let results = [];
+    if (type === "playlists") {
+      results = rankResults(playlists, query);
+    } else if (type === "videos") {
+      results = rankResults(videos, query);
+    } else if (type === "badges") {
+      results = rankResults(badges, query);
+    } else {
+      // Include badges in general search results
+      results = rankResults([...videos, ...playlists, ...badges], query);
+    }
 
-    log(`Final results: ${results.length} total items (${playlists.length} playlists, ${videos.length} videos) from search`);
-    
-    // Return ContentPager with mixed results in the videos array
-    return new ContentPager(results, false, null, []);
-    
+    log(
+      `Final results: ${results.length} items returned (requested type=${type}, total ${playlists.length} playlists, ${videos.length} videos, ${badges.length} badges)`
+    );
+
+    // Return ContentPager (hasMore=false for now, but you could hook in pagination later)
+    return new VideoPager(results, false, null, []);
   } catch (e) {
     log("Search failed: " + e.message + " (Stack: " + e.stack + ")");
-    return new ContentPager([], false, null, []);
+    return new VideoPager([], false, null, []);
   }
 };
 
@@ -538,6 +585,13 @@ function toPlatformVideo(rec) {
   const baseUrl = rec.column3?.value === "Adventure" 
     ? "https://app.adventuresinodyssey.com/badges/" 
     : "https://app.adventuresinodyssey.com/content/";
+  
+  // Format name with episode number
+  const episodeName = rec.column1?.value || "Untitled";
+  const episodeNumber = rec.column4?.value;
+  const displayName = episodeNumber 
+    ? `#${episodeNumber}: ${episodeName}`
+    : episodeName;
     
   return new PlatformVideo({
     id: new PlatformID(
@@ -545,7 +599,7 @@ function toPlatformVideo(rec) {
       PLATFORM_LINK,
       rec.id
     ),
-    name: rec.column1?.value || "Untitled",
+    name: displayName,
     url: `${baseUrl}${rec.id}`,
     thumbnails: new Thumbnails([
       new Thumbnail(rec.column2?.value || "", 128)
@@ -556,7 +610,7 @@ function toPlatformVideo(rec) {
        PLATFORM_LINK,
        "https://app.adventuresinodyssey.com/icons/Icon-167.png"
     ),
-    duration: rec.column4?.value ? Math.floor(rec.column4.value / 1000) : 0,
+    duration: 0,
     viewCount: 0
   });
 }

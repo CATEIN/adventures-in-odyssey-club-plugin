@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 7,
+    "version": 8,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -53,6 +53,12 @@
       }
       ],
     "changelog": {
+        "8" : [
+            "Very lil update",
+            "Fixed older club videos not loading",
+            "Support for playlist URLs (currently no way to get to them on grayjay)",
+            "Slightly better search"
+        ],
         "7" : [
             "Another small lil update",
             "Changed EpisodeHomePage endpoint again to one that gives both video and audio content",
