@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 8,
+    "version": 9,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -53,6 +53,12 @@
       }
       ],
     "changelog": {
+        "9" : [
+            "u p d a t e",
+            "content with null download_url throws UnavailableException",
+            "Randomizer now works for logged out users via episode cache system",
+            "Minor changes to recommendations"
+        ],
         "8" : [
             "Very lil update",
             "Fixed older club videos not loading",

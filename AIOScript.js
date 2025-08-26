@@ -4,6 +4,7 @@ const PLATFORM_LINK = "app.adventuresinodyssey.com"
 const BANNER_URL = "https://www.adventuresinodyssey.com/wp-content/uploads/whits-end-adventures-in-odyssey.jpg"
 
 const commentIdCache = {};
+let cachedEpisodeIds = null;
 
 const aioheaders = {
   "Content-Type": "application/json",
@@ -18,6 +19,71 @@ source.enable = function (conf, settings) {
   config = conf ?? {}
   local_settings = settings
   
+}
+
+function cacheEpisodeIds() {
+  if (cachedEpisodeIds !== null) {
+    return cachedEpisodeIds; // Already cached
+  }
+
+  try {
+    log("Caching free episode IDs...");
+    
+    const payload = {
+      community: "Adventures in Odyssey",
+      pageNumber: 1,
+      pageSize: 100, // Get all albums in one request
+      type: "Album"
+    };
+
+    const albumsData = fetchWithErrorHandling(
+      "https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search",
+      aioheaders,
+      "POST",
+      payload
+    );
+
+    // Extract episode IDs from all albums
+    const episodeIds = [];
+    const restrictedAlbums = ["Family Portraits", "The Officer Harley Collection", "#00: The Lost Episodes", "The Truth Chronicles"];
+    
+    if (albumsData && albumsData.contentGroupings) {
+      albumsData.contentGroupings.forEach(album => {
+        // Skip albums with ½ symbol in name
+        if (album.name && album.name.includes('½')) {
+          return;
+        }
+        
+        // Skip hard-coded restricted albums
+        if (album.name && restrictedAlbums.includes(album.name)) {
+          return;
+        }
+        
+        if (album.contentList && Array.isArray(album.contentList)) {
+          album.contentList.forEach(episode => {
+            if (episode.id && episode.type === "Audio" && episode.subtype === "Episode") {
+              // Skip episodes with "BONUS!" in name
+              const episodeName = episode.name || episode.short_name || "";
+              if (episodeName.includes("BONUS!")) {
+                return;
+              }
+              
+              episodeIds.push(episode.id);
+            }
+          });
+        }
+      });
+    }
+    
+    cachedEpisodeIds = episodeIds;
+    log(`Cached ${cachedEpisodeIds.length} episode IDs`);
+    return cachedEpisodeIds;
+    
+  } catch (error) {
+    log("Failed to cache episode IDs:", error);
+    cachedEpisodeIds = []; // Set to empty array to avoid retry
+    return cachedEpisodeIds;
+  }
 }
 
 function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) {
@@ -220,6 +286,10 @@ source.getContentDetails = function(url) {
     }
   }
 
+  if (!data.download_url) {
+    throw new UnavailableException('No media URL found.');
+  }
+
   // Create the appropriate source descriptor based on content type
   let sourceDescriptor;
   if (data.type === "Audio") {
@@ -278,33 +348,66 @@ source.getContentDetails = function(url) {
   });
 
   details.getContentRecommendations = function() {
-    const album = data.in_album?.content_list || data.in_album || [];
-    const recs = data.recommendations || [];
-    
-    // Handle extras - try both possible structures
-    let extrasArray = [];
-    if (data.extras?.content_list && Array.isArray(data.extras.content_list)) {
-        extrasArray = data.extras.content_list;
-    } else if (Array.isArray(data.extras)) {
-        extrasArray = data.extras;
+  const album = data.in_album?.content_list || data.in_album || [];
+  const recs = data.recommendations || [];
+  
+  // Handle extras - try both possible structures
+  let extrasArray = [];
+  if (data.extras?.content_list && Array.isArray(data.extras.content_list)) {
+      extrasArray = data.extras.content_list;
+  } else if (Array.isArray(data.extras)) {
+      extrasArray = data.extras;
+  }
+  
+  // Filter extras to only include Audio or Video types
+  const extras = extrasArray.filter(item => {
+      return item.type === "Audio" || item.type === "Video";
+  });
+  
+  // Handle next episode (goes first)
+  const nextEpisode = [];
+  if (data.next_episode && (data.next_episode.type === "Audio" || data.next_episode.type === "Video")) {
+    nextEpisode.push(data.next_episode);
+  }
+  
+  // Handle previous episode (goes after album)
+  const previousEpisode = [];
+  if (data.previous_episode && (data.previous_episode.type === "Audio" || data.previous_episode.type === "Video")) {
+    previousEpisode.push(data.previous_episode);
+  }
+  
+  // Combine all content in the new order: next_episode, extras, album, previous_episode, recommendations
+  const combined = nextEpisode.concat(extras).concat(album).concat(previousEpisode).concat(recs);
+
+  // Remove duplicates by tracking seen IDs, and filter out current content ID
+  const seenIds = new Set();
+  
+  const uniqueCombined = combined.filter(item => {
+    // Skip if it's the current content
+    if (item.id === contentId) {
+      return false;
     }
     
-    // Filter extras to only include Audio or Video types
-    const extras = extrasArray.filter(item => {
-        return item.type === "Audio" || item.type === "Video";
-    });
+    // Skip if we've already seen this ID
+    if (seenIds.has(item.id)) {
+      return false;
+    }
     
-    const combined = extras.concat(album).concat(recs);
-  
-    const videos = [];
-  
-    if (local_settings.fetchRandomEpisode && bridge.isLoggedIn()) {
+    seenIds.add(item.id);
+    return true;
+  });
+
+  const videos = [];
+
+  // Random episode logic
+  if (local_settings.fetchRandomEpisode) {
+    if (bridge.isLoggedIn()) {
+      // Use API if logged in
       const randomData = fetchWithErrorHandling(
         "https://fotf.my.site.com/aio/services/apexrest/v1/content/random",
         aioheaders
       );
-  
-      // Add only the random episode (no in_album or recommendations)
+
       videos.push(new PlatformVideo({
         id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
         name: "🎲 Random Episode",
@@ -320,33 +423,57 @@ source.getContentDetails = function(url) {
         ),
         duration: 0,
         viewCount: 0
-        // No uploadDate to keep it mysterious
       }));
+    } else {
+      // Cache episodes and pick random one if not logged in
+      const episodeIds = cacheEpisodeIds();
+      if (episodeIds.length > 0) {
+        const randomIndex = Math.floor(Math.random() * episodeIds.length);
+        const randomEpisodeId = episodeIds[randomIndex];
+        
+        videos.push(new PlatformVideo({
+          id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
+          name: "🎲 Random Episode",
+          url: `https://app.adventuresinodyssey.com/content/${randomEpisodeId}`,
+          thumbnails: new Thumbnails([
+            new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
+          ]),
+          author: new PlatformAuthorLink(
+            new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
+            PLATFORM_NAME,
+            PLATFORM_LINK,
+            "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+          ),
+          duration: 0,
+          viewCount: 0
+        }));
+      }
     }
-  
-    // Add this episode's album/recommendations/extras
-    for (const item of combined) {
-      videos.push(new PlatformVideo({
-        id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-        name: item.name || item.short_name || "Untitled",
-        url: `https://app.adventuresinodyssey.com/content/${item.id}`,
-        uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000) || 0,
-        thumbnails: new Thumbnails([
-          new Thumbnail(item.thumbnail_small || "", 128)
-        ]),
-        author: new PlatformAuthorLink(
-          new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-          PLATFORM_NAME,
-          PLATFORM_LINK,
-          "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-        ),
-        duration: (item.media_length || 0) / 1000,
-        viewCount: item.views || 0
-      }));
-    }
-  
-    return new VideoPager(videos, false, null);
-  };
+  }
+
+  // Add this episode's navigation/album/recommendations/extras
+  for (const item of uniqueCombined) {
+    videos.push(new PlatformVideo({
+      id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
+      name: item.short_name || item.name || "Untitled",
+      url: `https://app.adventuresinodyssey.com/content/${item.id}`,
+      uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000) || 0,
+      thumbnails: new Thumbnails([
+        new Thumbnail(item.thumbnail_small || "", 128)
+      ]),
+      author: new PlatformAuthorLink(
+        new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
+        PLATFORM_NAME,
+        PLATFORM_LINK,
+        "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+      ),
+      duration: (item.media_length || 0) / 1000,
+      viewCount: item.views || 0
+    }));
+  }
+
+  return new VideoPager(videos, false, null);
+};
 
   return details;
 };
