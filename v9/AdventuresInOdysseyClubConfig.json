@@ -1,0 +1,108 @@
+{
+    "name": "Adventures in Odyssey Club",
+    "description": "Subscription service for the award-winning, original audio drama series enjoyed by the whole family.",
+    "author": "CATEIN",
+    "authorUrl": "https://catein.xyz",
+    "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
+    "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
+    "scriptUrl": "./AIOScript.js",
+    "version": 9,
+    "iconUrl": "./AIOC.png",
+    "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
+    "scriptSignature": "",
+    "scriptPublicKey": "",
+    "packages": ["Http"],
+    "allowEval": false,
+    "allowUrls": ["fotf.my.site.com"],
+    "authentication": {
+      "loginUrl": "https://app.adventuresinodyssey.com/signin",
+      "domainHeadersToFind": { 
+        "fotf.my.site.com": ["Authorization", "x-viewer-id", "x-pin"]
+      },
+      "cookiesToFind": ["idccsrf"],
+      "loginWarning": "You must select a profile with a PIN for authentication to complete."
+    },
+    "settings": [
+        {
+            "variable": "fetchRandomEpisode",
+            "name": "Randomizer via Recommended",
+            "description": "Puts a random episode at the top of recommendations (Recommendations may take longer to load)",
+            "type": "Boolean",
+            "default": "false"
+        },
+        {
+          "variable": "commentPageSize",
+          "name": "Comment page size",
+          "description": "Set how many comments to load on each request. Higher might be slower",
+          "type": "Dropdown",
+          "default": "1",
+          "options": [
+            "10 (the club uses this)",
+            "20",
+            "30",
+            "40",
+            "50"
+          ]
+        }, 
+        {
+          "variable": "secretVariable",
+          "name": "Enable Experimental Ambient Playback Rerouting",
+          "description": "Only enable if you are not logged in",
+          "type": "Boolean",
+          "default": "false"
+      }
+      ],
+    "changelog": {
+        "9" : [
+            "u p d a t e",
+            "content with null download_url throws UnavailableException",
+            "Randomizer now works for logged out users via episode cache system",
+            "Minor changes to recommendations"
+        ],
+        "8" : [
+            "Very lil update",
+            "Fixed older club videos not loading",
+            "Support for playlist URLs (currently no way to get to them on grayjay)",
+            "Slightly better search"
+        ],
+        "7" : [
+            "Another small lil update",
+            "Changed EpisodeHomePage endpoint again to one that gives both video and audio content",
+            "Support for badge content (loads the first content id in the badge)"
+        ],
+        "6" : [
+            "Small lil update",
+            "Changed EpisodeHomePage API url to one the club might like better",
+            "Loading comments might show toast messages when searching for a page maybe?",
+            "Added themes support - issue #2 on github",
+            "Added weird video URL support - issue #3 on github"
+        ],
+        "5" : [
+            "Comment Update!",
+            "Finding comments should now use less requests",
+            "Replies now show up",
+            "Added setting for comment page size",
+            "Increased EpisodeHomePage size to 30 instead of 25"
+        ],
+        "4" : [
+            "No longer using allowUrls: everywhere",
+            "Renamed the plugin to Adventures in Odyssey Club"
+        ],
+        "3" : [
+            "Another update yay!",
+            "AIOC channel now displays albums as playlists",
+            "Added support for listening to free episodes and podcasts",
+            "Radio episodes now appear on the channel for non logged in users",
+            "Added settings"
+        ],
+        "2" : [
+            "Hi Jonny and Kevin. If you recived this message, I have successfully updated the plugin. If you are not Jonny or Kevin... hello",
+            "Audio now displays a thumbnail.",
+            "contentGroupings should now work as playlists",
+            "maybe a slightly better search",
+            "Upload date now appears on subscriptions"
+        ]
+    }
+
+  }
+  
