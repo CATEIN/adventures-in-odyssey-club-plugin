@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 9,
+    "version": 10,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -24,11 +24,46 @@
     },
     "settings": [
         {
+            "variable": "podcasts",
+            "name": "Podcasts",
+            "description": "Show new podcasts in subscription feed",
+            "type": "Boolean",
+            "default": "false"
+        },
+        {
             "variable": "fetchRandomEpisode",
             "name": "Randomizer via Recommended",
             "description": "Puts a random episode at the top of recommendations (Recommendations may take longer to load)",
             "type": "Boolean",
             "default": "false"
+        },
+        {
+            "variable": "fasterRandom",
+            "name": "Faster Randomizer",
+            "description": "Cache episodes instead of using the random API. Might not include the newest episodes. Default when not logged in.",
+            "type": "Boolean",
+            "default": "false",
+            "dependency": "fetchRandomEpisode"
+		},
+        {
+            "variable": "groupings",
+            "name": "Content Groupings",
+            "description": "Choose which content groups appear on the playlists tab",
+            "type": "Dropdown",
+            "default": "0",
+            "options": [
+            "Albums",
+            "Playlists (Club)",
+            "Series",
+            "Collections",
+            "Bonus Videos"
+          ]
+        },
+        {
+          "variable": "advancedHeader",
+            "name": "Advanced settings",
+            "description": "Advanced/Experimental settings",
+            "type": "Header"
         },
         {
           "variable": "commentPageSize",
@@ -43,7 +78,14 @@
             "40",
             "50"
           ]
-        }, 
+        },
+        {
+          "variable": "debug",
+            "name": "Show additional info",
+            "description": "Show additional info in description",
+            "type": "Boolean",
+            "default": "false"
+        },        
         {
           "variable": "secretVariable",
           "name": "Enable Experimental Ambient Playback Rerouting",
@@ -53,6 +95,15 @@
       }
       ],
     "changelog": {
+        "10" : [
+            "Support for content urls with contentGroup in them",
+            "Simplifyed isFreeEpisode logic",
+            "Support for getHome",
+            "Added Faster Randomizer setting for logged in users",
+            "Added Content Groupings setting",
+            "Added Show additional info setting",
+            "Added Podcasts setting"
+        ],
         "9" : [
             "u p d a t e",
             "content with null download_url throws UnavailableException",
@@ -94,13 +145,6 @@
             "Added support for listening to free episodes and podcasts",
             "Radio episodes now appear on the channel for non logged in users",
             "Added settings"
-        ],
-        "2" : [
-            "Hi Jonny and Kevin. If you recived this message, I have successfully updated the plugin. If you are not Jonny or Kevin... hello",
-            "Audio now displays a thumbnail.",
-            "contentGroupings should now work as playlists",
-            "maybe a slightly better search",
-            "Upload date now appears on subscriptions"
         ]
     }
 
