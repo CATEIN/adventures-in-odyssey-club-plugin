@@ -1,10 +1,6 @@
 # Adventures in Odyssey Club Grayjay Plugin
 Grayjay plugin for https://app.adventuresinodyssey.com/.
 
-Still in development but mostly functional...
-
-Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json
-
 ![qr code](https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png?raw=true)
 
 | Feature                             | Functional? | Note                              |
@@ -18,16 +14,22 @@ Install it: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-
 |  Themes | Yes       |           |
 |  Grayjay Playlists | Yes          |   |
 |  Grayjay Queue | Yes          |   |
-| Comics     | No          | Might be implemented... |
-|  Sharing/Reciving Timestamp in link | No          | Idk if this is possible...             |
 |  Search | Yes          | only as good as the club search      |
-|  Search Filters | No          | Yet to be implemented             |
 |  Subscribing | Yes          |           |
-|  Home Page | No          |    Yet to be implemented        |
-|  Downloads | No          | Gives 401 error            |
-|  F Cast | No          | Gives 401 error            |
+|  Home Page | Yes          |           |
 |  Chromecast | Yes          |             |
 | View Comments | Yes          |           |
 | View Comment Replies | Yes          |   |
+|  Search Filters | No          | Might be implemented..             |
+|  Downloads | No          | Gives 401 error, waiting for [download request modifier](https://gitlab.futo.org/videostreaming/grayjay/-/merge_requests/141) to be merged            |
+|  F Cast | No          | Gives 401 error, headers arent applying           |
 | Comment | No         |  No grayjay support yet         |
+| Comics     | No          | Might be implemented... |
+
+## Note for logged in users
+Currently there is no way to automaticly get a new auth token. When it expires, you should get a LoginRequired exception error thrown.
+To get a new token, either:
+
+- Login by selecting Login on a LoginRequiredException.
+- Going to plugin settings and logging out and in again.
 
