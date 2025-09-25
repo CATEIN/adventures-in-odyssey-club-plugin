@@ -4,8 +4,12 @@ const PLATFORM_LINK = "app.adventuresinodyssey.com"
 const BANNER_URL = "https://www.adventuresinodyssey.com/wp-content/uploads/whits-end-adventures-in-odyssey.jpg"
 const PLATFORM_CHANNEL_LOGO = "https://app.adventuresinodyssey.com/icons/Icon-167.png"
 
-const commentIdCache = {};
-let cachedEpisodeIds = null;
+const PLATFORM_AUTHOR = new PlatformAuthorLink(
+  new PlatformID(PLATFORM_NAME, PLATFORM_LINK),
+  PLATFORM_NAME,
+  PLATFORM_LINK,
+  PLATFORM_CHANNEL_LOGO
+);
 
 const aioheaders = {
   "Content-Type": "application/json",
@@ -13,6 +17,8 @@ const aioheaders = {
   "x-experience-name": "Adventures In Odyssey"
 };
 
+const commentIdCache = {};
+let cachedEpisodeIds = null;
 let local_settings;
 var config = {}
 
@@ -123,39 +129,47 @@ function fetchWithErrorHandling(url, headers = {}, method = "GET", body = null) 
 function formatDescription(data) {
   let out = data.description || "";
 
-  // 1 Air Date
+  if (data.content_body) {
+    // Remove image tags and their content while preserving other HTML
+    const cleanedContent = data.content_body
+      .replace(/<img[^>]*>/gi, '') // Remove img tags
+      .replace(/<\/img>/gi, ''); // Remove closing img tags (though they're usually self-closing)
+    
+    out += `\n\n${cleanedContent}`;
+  }
   if (data.air_date) {
-    // take "YYYY-MM-DD" before the "T", then swap dashes for slashes
     const dateOnly = data.air_date.split("T")[0].replace(/-/g, "/");
     out += `\n\nAir Date: ${dateOnly}`;
   }
-
-  // 2 Authors
   if (Array.isArray(data.authors) && data.authors.length) {
-    out += "\n\n" + data.authors
-      .map(a => `${a.role}: ${a.name}`)
-      .join("\n");
+  const authors = data.authors
+    .map(a => {
+      if (a.id) {
+        return `${a.role}: <a href="https://app.adventuresinodyssey.com/cast/${a.id}" target="_blank">${a.name}</a>`;
+      }
+      return `${a.role}: ${a.name}`;
+    })
+    .join("\n");
+  out += "\n\n" + authors;
   }
-
-  // 3 Characters
   if (Array.isArray(data.characters) && data.characters.length) {
-    out += "\n\nCharacters:\n" +
-      data.characters
-        .map(c => c.name)
-        .join("\n");
+  const characters = data.characters
+    .map(c => `<a href="https://app.adventuresinodyssey.com/characters/${c.id}" target="_blank">${c.nickname || c.name}</a>`)
+    .join(", ");
+  out += `\n\nCharacters: ${characters}`;
   }
-
-  // 4 Bible Verse
+  if (Array.isArray(data.tags) && data.tags.length) {
+  const themes = data.tags
+    .map(t => `<a href="https://app.adventuresinodyssey.com/themes/${t.topic_id}" target="_blank">${t.name}</a>`)
+    .join(", ");
+  out += `\n\nThemes: ${themes}`;
+  }
   if (data.bible_verse) {
     out += `\n\nBible Verse: ${data.bible_verse}`;
   }
-
-  // 5 Devotional
   if (data.devotional) {
-    out += `\n\nDevotional: ${data.devotional}`
+    out += `\n\nDevotional: ${data.devotional}`;
   }
-
-  // 6 Debug Info
   if (local_settings && local_settings.debug) {
     if (data.id) {
       out += `\n\nID: ${data.id}`;
@@ -185,24 +199,107 @@ function formatDescription(data) {
       out += `\n\nDownload URL: ${data.download_url}`;
     }
   }
-
   return out;
 }
 
 function isEpisodeFree(recentAirDate) {
   const airDate = new Date(recentAirDate);
   if (isNaN(airDate.getTime())) return false; // Invalid date
-  
+
   const today = new Date();
   const ageInDays = (today - airDate) / (1000 * 60 * 60 * 24);
-  return ageInDays <= 7;
+  return ageInDays >= 0 && ageInDays <= 7; // Must be 0–7 days old, not negative (future)
+}
+
+function rankResults(items, query) {
+  const lowerQuery = query.toLowerCase();
+
+  return items.sort((a, b) => {
+    const aTitle = (a.name || "").toLowerCase();
+    const bTitle = (b.name || "").toLowerCase();
+
+    // Exact match → highest priority
+    const aExact = aTitle === lowerQuery;
+    const bExact = bTitle === lowerQuery;
+    if (aExact && !bExact) return -1;
+    if (bExact && !aExact) return 1;
+
+    // Title contains query (at start is better than in middle)
+    const aIndex = aTitle.indexOf(lowerQuery);
+    const bIndex = bTitle.indexOf(lowerQuery);
+
+    if (aIndex !== -1 && bIndex === -1) return -1;
+    if (bIndex !== -1 && aIndex === -1) return 1;
+
+    if (aIndex !== -1 && bIndex !== -1) {
+      // Earlier occurrence is better
+      if (aIndex < bIndex) return -1;
+      if (bIndex < aIndex) return 1;
+    }
+
+    // Fallback: keep original order
+    return 0;
+  });
+}
+
+function toPlatformPlaylist(rec) {
+  // Calculate videoCount from total runtime
+  const totalRuntimeMs = rec.column3?.value || 0;
+  const averageEpisodeDurationMs = 23 * 60 * 1000; // 23 minutes in milliseconds
+  const videoCount = Math.round(totalRuntimeMs / averageEpisodeDurationMs);
+
+  const baseUrl = (rec.column3?.value === "Badge" || rec.column3?.value === "Adventure")
+  ? "https://app.adventuresinodyssey.com/badges/"
+  : "https://app.adventuresinodyssey.com/contentGroup/";
+
+
+  return new PlatformPlaylist({
+    id: new PlatformID(
+      PLATFORM_NAME,
+      PLATFORM_LINK,
+      rec.id
+    ),
+    name: rec.column1?.value || "Untitled",
+    thumbnail: rec.column2?.value || "",
+    author: PLATFORM_AUTHOR,
+    url: `${baseUrl}${rec.id}`,
+    videoCount: videoCount
+  });
+}
+
+function toPlatformVideo(rec) {
+  const baseUrl = rec.column3?.value === "Adventure" 
+    ? "https://app.adventuresinodyssey.com/badges/" 
+    : "https://app.adventuresinodyssey.com/content/";
+  
+  // Format name with episode number
+  const episodeName = rec.column1?.value || "Untitled";
+  const episodeNumber = rec.column4?.value;
+  const displayName = episodeNumber 
+    ? `#${episodeNumber}: ${episodeName}`
+    : episodeName;
+    
+  return new PlatformVideo({
+    id: new PlatformID(
+      PLATFORM_NAME,
+      PLATFORM_LINK,
+      rec.id
+    ),
+    name: displayName,
+    url: `${baseUrl}${rec.id}`,
+    thumbnails: new Thumbnails([
+      new Thumbnail(rec.column2?.value || "", 128)
+    ]),
+    author: PLATFORM_AUTHOR,
+    duration: 0,
+    viewCount: 0
+  });
 }
 
 // Check if a URL is a content details URL
 source.isContentDetailsUrl = function(url) {
     // Check if the URL matches the pattern for AiO content URLs
     return url.startsWith('https://app.adventuresinodyssey.com/content/') ||
-           url.startsWith('https://app.adventuresinodyssey.com/badges/') ||
            url.startsWith('https://app.adventuresinodyssey.com/video?') ||
            (url.startsWith('https://app.adventuresinodyssey.com/') && 
             url.includes('/contentGroup/') && 
@@ -212,6 +309,7 @@ source.isContentDetailsUrl = function(url) {
 source.isPlaylistUrl = function(url) {
   return (url.startsWith('https://app.adventuresinodyssey.com/contentGroup/') && !url.includes('/content/')) ||
            url.startsWith('https://app.adventuresinodyssey.com/playlists/') ||
+           url.startsWith('https://app.adventuresinodyssey.com/badges/') ||
            url.startsWith('https://app.adventuresinodyssey.com/themes/');
 };
   
@@ -246,46 +344,24 @@ source.getContentDetails = function(url) {
   }
   log("Randomizer? " + local_settings.fetchRandomEpisode);
 
-  // Check if it's a badges URL
-  if (url.startsWith('https://app.adventuresinodyssey.com/badges/')) {
-    if (!bridge.isLoggedIn()) {
-      throw new ScriptLoginRequiredException("Login to listen to this episode");
-    }
-    
-    const badgeApiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/badge/${contentId}`;
-    const badgeData = fetchWithErrorHandling(badgeApiUrl, aioheaders);
-    
-    // Extract contentToCompleteId from the first requirement and use it as the new contentId
-    if (badgeData.badges && badgeData.badges.length > 0 && 
-        badgeData.badges[0].requirements && badgeData.badges[0].requirements.length > 0) {
-      const newContentId = badgeData.badges[0].requirements[0].contentToCompleteId;
-      
-      // Now fetch the actual content using the contentToCompleteId
-      const apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${newContentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
-      data = fetchWithErrorHandling(apiUrl, aioheaders);
-    } else {
-      throw new Error("Invalid badge data structure");
-    }
+  // Regular content handling
+  let apiUrl;
+  const baseParams = "tag=true&series=true&recommendations=true&player=true&parent=true";
+  
+  if (bridge.isLoggedIn()) {
+    // User is logged in - use the original URL
+    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?${baseParams}`;
   } else {
-    // Regular content handling
-    let apiUrl;
-    const baseParams = "tag=true&series=true&recommendations=true&player=true&parent=true";
-    
-    if (bridge.isLoggedIn()) {
-      // User is logged in - use the original URL
-      apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?${baseParams}`;
-    } else {
-      // User is not logged in - use the alternative URL with radio_page_type
-      apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?${baseParams}&radio_page_type=aired`;
-    }
-
-    // Add content_grouping_id if available
-    if (contentGroupingId) {
-      apiUrl += `&content_grouping_id=${contentGroupingId}`;
-    }
-
-    data = fetchWithErrorHandling(apiUrl, aioheaders);
+    // User is not logged in - use the alternative URL with radio_page_type
+    apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${contentId}?${baseParams}&radio_page_type=aired`;
   }
+
+  // Add content_grouping_id if available
+  if (contentGroupingId) {
+    apiUrl += `&content_grouping_id=${contentGroupingId}`;
+  }
+
+  data = fetchWithErrorHandling(apiUrl, aioheaders);
 
   if (data.type !== "Audio" && data.type !== "Video") {
     log("Unsupported content type: " + data.type);
@@ -358,12 +434,7 @@ source.getContentDetails = function(url) {
     thumbnails: new Thumbnails([
       new Thumbnail(data.thumbnail_small || "", 128)
     ]),
-    author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_LINK, contentId),
-      PLATFORM_NAME,
-      PLATFORM_LINK,
-      "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-    ),
+    author: PLATFORM_AUTHOR,
     name: data.short_name,
     uploadDate: Math.floor(new Date(data.air_date).getTime() / 1000) || Math.floor(new Date(data.last_published_date).getTime() / 1000),
     duration: data.media_length / 1000,
@@ -413,8 +484,6 @@ source.getContentDetails = function(url) {
     if (item.id === contentId) {
       return false;
     }
-    
-    // Skip if we've already seen this ID
     if (seenIds.has(item.id)) {
       return false;
     }
@@ -444,12 +513,7 @@ source.getContentDetails = function(url) {
                 thumbnails: new Thumbnails([
                     new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
                 ]),
-                author: new PlatformAuthorLink(
-                    new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
-                    PLATFORM_NAME,
-                    PLATFORM_LINK,
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                ),
+                author: PLATFORM_AUTHOR,
                 duration: 0,
                 viewCount: 0
             }));
@@ -467,12 +531,7 @@ source.getContentDetails = function(url) {
             thumbnails: new Thumbnails([
                 new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
             ]),
-            author: new PlatformAuthorLink(
-                new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
-                PLATFORM_NAME,
-                PLATFORM_LINK,
-                "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-            ),
+            author: PLATFORM_AUTHOR,
             duration: 0,
             viewCount: 0
         }));
@@ -493,12 +552,7 @@ source.getContentDetails = function(url) {
                 thumbnails: new Thumbnails([
                     new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
                 ]),
-                author: new PlatformAuthorLink(
-                    new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
-                    PLATFORM_NAME,
-                    PLATFORM_LINK,
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                ),
+                author: PLATFORM_AUTHOR,
                 duration: 0,
                 viewCount: 0
             }));
@@ -516,12 +570,7 @@ source.getContentDetails = function(url) {
       thumbnails: new Thumbnails([
         new Thumbnail(item.thumbnail_small || "", 128)
       ]),
-      author: new PlatformAuthorLink(
-        new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.id),
-        PLATFORM_NAME,
-        PLATFORM_LINK,
-        "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-      ),
+      author: PLATFORM_AUTHOR,
       duration: (item.media_length || 0) / 1000,
       viewCount: item.views || 0
     }));
@@ -537,25 +586,49 @@ source.getPlaylist = function(url) {
   const contentGroupId = url.split('/').pop();
   log("Fetching playlist ID: " + contentGroupId);
 
-  // Check if this is a theme URL or regular content group
+  // Check what type of URL this is
   const isTheme = url.includes('/themes/');
-  const apiEndpoint = isTheme 
-    ? `https://fotf.my.site.com/aio/services/apexrest/v1/topic/${contentGroupId}`
-    : `https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/${contentGroupId}`;
+  const isBadge = url.includes('/badges/');
+  
+  let apiEndpoint;
+  if (isBadge) {
+    apiEndpoint = `https://fotf.my.site.com/aio/services/apexrest/v1/badge/${contentGroupId}`;
+  } else if (isTheme) {
+    apiEndpoint = `https://fotf.my.site.com/aio/services/apexrest/v1/topic/${contentGroupId}`;
+  } else {
+    apiEndpoint = `https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/${contentGroupId}`;
+  }
 
   const data = fetchWithErrorHandling(apiEndpoint, aioheaders);
 
   let grouping = {};
   let rawList = [];
-  let playlistTitle = `Playlist ${contentGroupId}`;
+  let playlistTitle = `contentGroup ${contentGroupId}`;
 
-  if (isTheme) {
+  if (isBadge) {
+    // Handle badge data structure
+    const badge = data.badges && data.badges.length > 0 ? data.badges[0] : data;
+    grouping = badge;
+    
+    // Extract content from badge requirements
+    rawList = [];
+    if (Array.isArray(badge.requirements)) {
+      badge.requirements.forEach(req => {
+        if (req.contentToComplete && req.contentToComplete.type) {
+          rawList.push(req.contentToComplete);
+        }
+      });
+    }
+    
+    playlistTitle = badge.name || `Badge ${contentGroupId}`;
+    
+  } else if (isTheme) {
     // Handle theme data structure
     const topic = Array.isArray(data.topics) && data.topics[0] ? data.topics[0] : {};
     grouping = topic;
     rawList = Array.isArray(topic.recommendations) ? topic.recommendations : [];
     playlistTitle = topic.name || `Theme ${contentGroupId}`;
-    log("Theme data - name: " + topic.name + ", recommendations count: " + rawList.length);
+    
   } else {
     // Handle regular content group data structure
     grouping = Array.isArray(data.contentGroupings) && data.contentGroupings[0]
@@ -574,30 +647,22 @@ source.getPlaylist = function(url) {
   );
   const uploadTimestamp = Math.floor(baseDate.getTime() / 1000);
 
-  const author = new PlatformAuthorLink(
-    new PlatformID(PLATFORM_NAME, PLATFORM_LINK, contentGroupId),
-    PLATFORM_NAME,
-    PLATFORM_LINK,
-    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-  );
-
   const contents = rawList
     .filter(item => item.type === "Audio" || item.type === "Video")
     .map(item => new PlatformVideo({
       id:         new PlatformID(PLATFORM_NAME, PLATFORM_LINK, item.link_to_id),
       name:       item.short_name || item.name,
       thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
-      author:     author,
+      author:     PLATFORM_AUTHOR,
       uploadDate: uploadTimestamp,
       duration:   (item.media_length || 0) / 1000,
       viewCount:  item.views || 0,
       url:        `https://app.adventuresinodyssey.com/content/${item.link_to_id}`
     }));
 
-    log(grouping.imageURL);
   return new PlatformPlaylistDetails({
     id:         new PlatformID(PLATFORM_NAME, PLATFORM_NAME, contentGroupId),
-    author:     author,
+    author:     PLATFORM_AUTHOR,
     url:        url,
     name:       playlistTitle,
     videoCount: contents.length,
@@ -606,44 +671,7 @@ source.getPlaylist = function(url) {
   });
 };
 
-source.getSearchCapabilities = () => ({
-  types:  [ Type.Feed.Mixed ],
-  sorts:  [],
-  filters:[ ]
-});
-
-function rankResults(items, query) {
-  const lowerQuery = query.toLowerCase();
-
-  return items.sort((a, b) => {
-    const aTitle = (a.name || "").toLowerCase();
-    const bTitle = (b.name || "").toLowerCase();
-
-    // Exact match → highest priority
-    const aExact = aTitle === lowerQuery;
-    const bExact = bTitle === lowerQuery;
-    if (aExact && !bExact) return -1;
-    if (bExact && !aExact) return 1;
-
-    // Title contains query (at start is better than in middle)
-    const aIndex = aTitle.indexOf(lowerQuery);
-    const bIndex = bTitle.indexOf(lowerQuery);
-
-    if (aIndex !== -1 && bIndex === -1) return -1;
-    if (bIndex !== -1 && aIndex === -1) return 1;
-
-    if (aIndex !== -1 && bIndex !== -1) {
-      // Earlier occurrence is better
-      if (aIndex < bIndex) return -1;
-      if (bIndex < aIndex) return 1;
-    }
-
-    // Fallback: keep original order
-    return 0;
-  });
-}
-
-source.search = (query, type, page, filter) => {
+source.search = (query, type) => {
   try {
     // Build payload with larger page size
     const payload = {
@@ -681,9 +709,9 @@ source.search = (query, type, page, filter) => {
 
     const convertToPlatform = function (rec, section) {
       switch (section.objectName) {
+        case "Badge__c":
         case "Content_Grouping__c":
           return toPlatformPlaylist(rec);
-        case "Badge__c":
         case "Content__c":
         default:
           return toPlatformVideo(rec);
@@ -730,72 +758,12 @@ source.search = (query, type, page, filter) => {
       `Final results: ${results.length} items returned (requested type=${type}, total ${playlists.length} playlists, ${videos.length} videos, ${badges.length} badges)`
     );
 
-    // Return ContentPager (hasMore=false for now, but you could hook in pagination later)
     return new VideoPager(results, false, null, []);
   } catch (e) {
     log("Search failed: " + e.message + " (Stack: " + e.stack + ")");
     return new VideoPager([], false, null, []);
   }
 };
-
-function toPlatformPlaylist(rec) {
-  // Calculate videoCount from total runtime
-  const totalRuntimeMs = rec.column3?.value || 0;
-  const averageEpisodeDurationMs = 23 * 60 * 1000; // 23 minutes in milliseconds
-  const videoCount = Math.round(totalRuntimeMs / averageEpisodeDurationMs);
-  
-  return new PlatformPlaylist({
-    id: new PlatformID(
-      PLATFORM_NAME,
-      PLATFORM_LINK,
-      rec.id
-    ),
-    name: rec.column1?.value || "Untitled",
-    thumbnail: rec.column2?.value || "",
-    author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id), 
-      PLATFORM_NAME, 
-      PLATFORM_LINK, 
-      "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-    ),
-    url: `https://app.adventuresinodyssey.com/contentGroup/${rec.id}`,
-    videoCount: videoCount
-  });
-}
-
-function toPlatformVideo(rec) {
-  const baseUrl = rec.column3?.value === "Adventure" 
-    ? "https://app.adventuresinodyssey.com/badges/" 
-    : "https://app.adventuresinodyssey.com/content/";
-  
-  // Format name with episode number
-  const episodeName = rec.column1?.value || "Untitled";
-  const episodeNumber = rec.column4?.value;
-  const displayName = episodeNumber 
-    ? `#${episodeNumber}: ${episodeName}`
-    : episodeName;
-    
-  return new PlatformVideo({
-    id: new PlatformID(
-      PLATFORM_NAME,
-      PLATFORM_LINK,
-      rec.id
-    ),
-    name: displayName,
-    url: `${baseUrl}${rec.id}`,
-    thumbnails: new Thumbnails([
-      new Thumbnail(rec.column2?.value || "", 128)
-    ]),
-    author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, rec.id),
-       PLATFORM_NAME,
-       PLATFORM_LINK,
-       "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-    ),
-    duration: 0,
-    viewCount: 0
-  });
-}
 
 source.isChannelUrl = function(input) {
   return input === "app.adventuresinodyssey.com";
@@ -957,12 +925,7 @@ function fetchEpisodeHomePage(pageNumber) {
     name:       item.short_name || item.name || "Untitled",
     url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
     thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small||"",128) ]),
-    author:     new PlatformAuthorLink(
-                  new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-                  "Adventures In Odyssey Club",
-                  "app.adventuresinodyssey.com",
-                  "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                ),
+    author:     PLATFORM_AUTHOR,
     uploadDate: Math.floor(new Date(item.air_date).getTime() / 1000) || Math.floor(new Date(item.last_published_date).getTime() / 1000),
     duration:   (item.media_length||0)/1000,
     viewCount:  item.views||0
@@ -1010,12 +973,7 @@ function fetchFreeEpisodes(pageNumber) {
       name:       "FREE: " + (item.name || item.short_name || "Untitled"),
       url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
       thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
-      author:     new PlatformAuthorLink(
-                    new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-                    "Adventures In Odyssey Club",
-                    "app.adventuresinodyssey.com",
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                  ),
+      author:     PLATFORM_AUTHOR,
       uploadDate: Math.floor(new Date(item.recent_air_date || item.air_date || 0).getTime() / 1000),
       duration:   (item.media_length || 0) / 1000,
       viewCount:  item.views || 0
@@ -1027,12 +985,7 @@ function fetchFreeEpisodes(pageNumber) {
       name:       (item.name || item.short_name || "Untitled"),
       url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
       thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
-      author:     new PlatformAuthorLink(
-                    new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-                    "Adventures In Odyssey Club",
-                    "app.adventuresinodyssey.com",
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                  ),
+      author:     PLATFORM_AUTHOR,
       uploadDate: Math.floor(new Date(item.last_published_date || item.air_date || 0).getTime() / 1000),
       duration:   (item.media_length || 0) / 1000,
       viewCount:  item.views || 0
@@ -1064,12 +1017,7 @@ function fetchFreeEpisodes(pageNumber) {
       name:       "FREE: " + (item.name || item.short_name || "Untitled"),
       url:        `https://app.adventuresinodyssey.com/content/${item.id}`,
       thumbnails: new Thumbnails([ new Thumbnail(item.thumbnail_small || "", 128) ]),
-      author:     new PlatformAuthorLink(
-                    new PlatformID("Adventures In Odyssey Club", item.id, item.id),
-                    "Adventures In Odyssey Club",
-                    "app.adventuresinodyssey.com",
-                    "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-                  ),
+      author:     PLATFORM_AUTHOR,
       uploadDate: Math.floor(new Date(item.recent_air_date || item.air_date || 0).getTime() / 1000),
       duration:   (item.media_length || 0) / 1000,
       viewCount:  item.views || 0
@@ -1083,7 +1031,7 @@ function fetchAlbumsPage(pageNumber) {
   let payload, url;
   
   // Get the grouping type based on the dropdown selection
-  const groupingTypes = ["Album", "Playlist", "Series", "Collection", "Bonus Video Home"];
+  const groupingTypes = ["Album", "Playlist", "Series", "Collection", "Bonus Video Home", "Life Lesson"];
   const selectedType = groupingTypes[local_settings.groupings] || "Album";
   
   if (selectedType === "Playlist" && bridge.isLoggedIn()) {
@@ -1138,12 +1086,7 @@ function fetchAlbumsPage(pageNumber) {
 
   const playlists = list.map(album => new PlatformPlaylist({
     id: new PlatformID(PLATFORM_NAME, album.id, album.id),
-    author: new PlatformAuthorLink(
-      new PlatformID(PLATFORM_NAME, PLATFORM_NAME, album.id), 
-      PLATFORM_NAME, 
-      PLATFORM_LINK, 
-      "https://app.adventuresinodyssey.com/icons/Icon-167.png"
-    ),
+    author: PLATFORM_AUTHOR,
     name: album.name || album.album_name || "Untitled Album",
     description: album.description || "",
     thumbnail: album.imageURL || "",
@@ -1397,7 +1340,7 @@ function findCommentPage(contentId) {
 
 source.getComments = function(url, continuationToken) {
   if (!bridge.isLoggedIn()) {
-    throw new ScriptException("Login to view comments");
+    return
   }
 
   try {

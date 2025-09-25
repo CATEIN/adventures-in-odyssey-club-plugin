@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 10,
+    "version": 11,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -56,7 +56,8 @@
             "Playlists (Club)",
             "Series",
             "Collections",
-            "Bonus Videos"
+            "Bonus Videos",
+            "Life Lessons"
           ]
         },
         {
@@ -95,6 +96,12 @@
       }
       ],
     "changelog": {
+        "11" : [
+            "Fixed upcoming free episodes attempting to play",
+            "Badges are now platform playlist instead of content",
+            "Description now includes content_body and themes",
+            "Description now includes links for Themes and Characters"
+        ],
         "10" : [
             "Support for content urls with contentGroup in them",
             "Simplifyed isFreeEpisode logic",
@@ -138,13 +145,6 @@
         "4" : [
             "No longer using allowUrls: everywhere",
             "Renamed the plugin to Adventures in Odyssey Club"
-        ],
-        "3" : [
-            "Another update yay!",
-            "AIOC channel now displays albums as playlists",
-            "Added support for listening to free episodes and podcasts",
-            "Radio episodes now appear on the channel for non logged in users",
-            "Added settings"
         ]
     }
 
