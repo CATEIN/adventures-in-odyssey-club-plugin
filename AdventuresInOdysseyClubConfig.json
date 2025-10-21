@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 11,
+    "version": 12,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -96,6 +96,9 @@
       }
       ],
     "changelog": {
+        "12" : [
+            "Added support for direct media urls starting with https://media.adventuresinodyssey.com/private/audio/episode"
+        ],
         "11" : [
             "Fixed upcoming free episodes attempting to play",
             "Badges are now platform playlist instead of content",
