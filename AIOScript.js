@@ -303,7 +303,8 @@ source.isContentDetailsUrl = function(url) {
            url.startsWith('https://app.adventuresinodyssey.com/video?') ||
            (url.startsWith('https://app.adventuresinodyssey.com/') && 
             url.includes('/contentGroup/') && 
-            url.includes('/content/'));
+            url.includes('/content/')) ||
+            url.startsWith('https://media.adventuresinodyssey.com/private/audio/episode');
   };
 
 source.isPlaylistUrl = function(url) {
@@ -318,6 +319,72 @@ source.getContentDetails = function(url) {
   let data;
   let contentId;
   let contentGroupingId = null;
+
+   // Check if this is a direct media URL
+  if (url.startsWith('https://media.adventuresinodyssey.com/private/audio/')) {
+    log("Direct media URL detected");
+    
+    // Direct media URLs require login
+    if (!bridge.isLoggedIn()) {
+      throw new ScriptLoginRequiredException("Login required to access direct media URLs");
+    }
+    
+    // Use the fixed API URL to get the signed cookie
+    const apiUrl = 'https://fotf.my.site.com/aio/services/apexrest/v1/content/a354W0000046V5fQAE?tag=true&series=true&recommendations=true&player=true&parent=true';
+    data = fetchWithErrorHandling(apiUrl, aioheaders);
+    
+    if (!data.signed_cookie) {
+      throw new UnavailableException('No signed cookie found for direct media URL');
+    }
+    
+    // Extract cookie parameters from signed_cookie
+    // Format: https://media.adventuresinodyssey.com/private/audio/episode/*?Policy=...&Signature=...&Key-Pair-Id=...
+    const cookieParams = data.signed_cookie.split('*?')[1];
+    
+    if (!cookieParams) {
+      throw new UnavailableException('Invalid signed cookie format');
+    }
+    
+    // Normalize the URL to full format if it's a relative path
+    let fullUrl = url;
+    
+    // Extract filename from URL
+    const filename = fullUrl.split('/').pop().split('?')[0]; // Get filename without query params
+    
+    // Append the cookie parameters to the original URL
+    const authenticatedUrl = fullUrl + '?' + cookieParams;
+    
+    // Create audio source descriptor with authenticated URL
+    const sourceDescriptor = new UnMuxVideoSourceDescriptor(
+      [],
+      [
+        new AudioUrlSource({
+          name: filename,
+          duration: 0,
+          url: authenticatedUrl,
+          requestModifier: {
+            headers: {
+              "Sec-Fetch-Dest": "audio",
+              "range": "-",
+            }
+          }
+        })
+      ]
+    );
+    
+    return new PlatformVideoDetails({
+      id: new PlatformID(PLATFORM_NAME, PLATFORM_NAME, "direct_media"),
+      thumbnails: new Thumbnails([]),
+      author: PLATFORM_AUTHOR,
+      name: filename,
+      uploadDate: 0,
+      duration: 0,
+      viewCount: 0,
+      url: fullUrl,
+      description: "",
+      video: sourceDescriptor
+    });
+  }
 
   // Extract the content ID and content grouping ID from the URL
   if (url.startsWith('https://app.adventuresinodyssey.com/video?')) {
