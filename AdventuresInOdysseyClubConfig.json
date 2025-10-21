@@ -13,7 +13,7 @@
     "scriptPublicKey": "",
     "packages": ["Http"],
     "allowEval": false,
-    "allowUrls": ["fotf.my.site.com"],
+    "allowUrls": ["fotf.my.site.com", "media.adventuresinodyssey.com"],
     "authentication": {
       "loginUrl": "https://app.adventuresinodyssey.com/signin",
       "domainHeadersToFind": { 
