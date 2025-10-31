@@ -130,10 +130,11 @@ function formatDescription(data) {
   let out = data.description || "";
 
   if (data.content_body) {
-    // Remove image tags and their content while preserving other HTML
+    // Extract image URLs and replace with clickable [Image] links
     const cleanedContent = data.content_body
-      .replace(/<img[^>]*>/gi, '') // Remove img tags
-      .replace(/<\/img>/gi, ''); // Remove closing img tags (though they're usually self-closing)
+      .replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, (match, src) => {
+        return `<a href="${src}" target="_blank" rel="noopener noreferrer">[Image]</a>`;
+      });
     
     out += `\n\n${cleanedContent}`;
   }
@@ -197,6 +198,9 @@ function formatDescription(data) {
     }
     if (data.download_url) {
       out += `\n\nDownload URL: ${data.download_url}`;
+    }
+    if (data.signed_cookie) {
+      out += `\n\nSigned Cookie: ${data.signed_cookie}`;
     }
   }
   return out;
@@ -372,18 +376,26 @@ source.getContentDetails = function(url) {
       ]
     );
     
-    return new PlatformVideoDetails({
+    const details = new PlatformVideoDetails({
       id: new PlatformID(PLATFORM_NAME, PLATFORM_NAME, "direct_media"),
-      thumbnails: new Thumbnails([]),
+      thumbnails: new Thumbnails([
+      new Thumbnail(PLATFORM_CHANNEL_LOGO || "", 128)
+    ]),
       author: PLATFORM_AUTHOR,
       name: filename,
       uploadDate: 0,
       duration: 0,
       viewCount: 0,
       url: fullUrl,
-      description: "",
+      description: `\n\nURL: ${authenticatedUrl}`,
       video: sourceDescriptor
     });
+    
+    details.getContentRecommendations = function() {
+      return buildRecommendations(null, null);
+    };
+    
+    return details;
   }
 
   // Extract the content ID and content grouping ID from the URL
@@ -512,20 +524,101 @@ source.getContentDetails = function(url) {
   });
 
   details.getContentRecommendations = function() {
+    return buildRecommendations(data, contentId);
+  };
+
+  return details;
+};
+
+// Build recommendations for content
+function buildRecommendations(data, contentId) {
+  const videos = [];
+  
+  // Random episode logic
+  if (local_settings.fetchRandomEpisode) {
+    if (bridge.isLoggedIn() && local_settings.fasterRandom) {
+      // Use cached episodes instead of API when fasterRandom is enabled
+      const episodeIds = cacheEpisodeIds(true); // Pass true to skip album restrictions
+      
+      // Filter out the current episode ID
+      const availableEpisodes = episodeIds.filter(id => id !== contentId);
+      
+      if (availableEpisodes.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableEpisodes.length);
+        const randomEpisodeId = availableEpisodes[randomIndex];
+        videos.push(new PlatformVideo({
+          id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
+          name: "🎲 Random Episode",
+          url: `https://app.adventuresinodyssey.com/content/${randomEpisodeId}`,
+          thumbnails: new Thumbnails([
+            new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
+          ]),
+          author: PLATFORM_AUTHOR,
+          duration: 0,
+          viewCount: 0
+        }));
+      }
+    } else if (bridge.isLoggedIn()) {
+      // Use API if logged in and fasterRandom is false
+      const randomData = fetchWithErrorHandling(
+        "https://fotf.my.site.com/aio/services/apexrest/v1/content/random",
+        aioheaders
+      );
+      videos.push(new PlatformVideo({
+        id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
+        name: "🎲 Random Episode",
+        url: `https://app.adventuresinodyssey.com/content/${randomData.id}`,
+        thumbnails: new Thumbnails([
+          new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
+        ]),
+        author: PLATFORM_AUTHOR,
+        duration: 0,
+        viewCount: 0
+      }));
+    } else {
+      // Cache episodes and pick random one if not logged in
+      const episodeIds = cacheEpisodeIds(false); // Use regular caching mode
+      
+      // Filter out the current episode ID
+      const availableEpisodes = episodeIds.filter(id => id !== contentId);
+      
+      if (availableEpisodes.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableEpisodes.length);
+        const randomEpisodeId = availableEpisodes[randomIndex];
+        videos.push(new PlatformVideo({
+          id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
+          name: "🎲 Random Episode",
+          url: `https://app.adventuresinodyssey.com/content/${randomEpisodeId}`,
+          thumbnails: new Thumbnails([
+            new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
+          ]),
+          author: PLATFORM_AUTHOR,
+          duration: 0,
+          viewCount: 0
+        }));
+      }
+    }
+  }
+  
+  // If data is null (direct media URL), return only random episode
+  if (!data) {
+    return new VideoPager(videos, false, null);
+  }
+
   const album = data.in_album?.content_list || data.in_album || [];
   const recs = data.recommendations || [];
   
   // Handle extras - try both possible structures
   let extrasArray = [];
   if (data.extras?.content_list && Array.isArray(data.extras.content_list)) {
-      extrasArray = data.extras.content_list;
+    extrasArray = data.extras.content_list;
   } else if (Array.isArray(data.extras)) {
-      extrasArray = data.extras;
+    extrasArray = data.extras;
   }
   
   // Filter extras to only include Audio or Video types
   const extras = extrasArray.filter(item => {
-      return item.type === "Audio" || item.type === "Video";
+    return item.type === "Audio" || item.type === "Video";
   });
   
   // Handle next episode (goes first)
@@ -559,74 +652,6 @@ source.getContentDetails = function(url) {
     return true;
   });
 
-  const videos = [];
-
-  // Random episode logic
-  if (local_settings.fetchRandomEpisode) {
-    if (bridge.isLoggedIn() && local_settings.fasterRandom) {
-        // Use cached episodes instead of API when fasterRandom is enabled
-        const episodeIds = cacheEpisodeIds(true); // Pass true to skip album restrictions
-        
-        // Filter out the current episode ID
-        const availableEpisodes = episodeIds.filter(id => id !== contentId);
-        
-        if (availableEpisodes.length > 0) {
-            const randomIndex = Math.floor(Math.random() * availableEpisodes.length);
-            const randomEpisodeId = availableEpisodes[randomIndex];
-            videos.push(new PlatformVideo({
-                id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
-                name: "🎲 Random Episode",
-                url: `https://app.adventuresinodyssey.com/content/${randomEpisodeId}`,
-                thumbnails: new Thumbnails([
-                    new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
-                ]),
-                author: PLATFORM_AUTHOR,
-                duration: 0,
-                viewCount: 0
-            }));
-        }
-    } else if (bridge.isLoggedIn()) {
-        // Use API if logged in and fasterRandom is false
-        const randomData = fetchWithErrorHandling(
-            "https://fotf.my.site.com/aio/services/apexrest/v1/content/random",
-            aioheaders
-        );
-        videos.push(new PlatformVideo({
-            id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomData.id),
-            name: "🎲 Random Episode",
-            url: `https://app.adventuresinodyssey.com/content/${randomData.id}`,
-            thumbnails: new Thumbnails([
-                new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
-            ]),
-            author: PLATFORM_AUTHOR,
-            duration: 0,
-            viewCount: 0
-        }));
-    } else {
-        // Cache episodes and pick random one if not logged in
-        const episodeIds = cacheEpisodeIds(false); // Use regular caching mode
-        
-        // Filter out the current episode ID
-        const availableEpisodes = episodeIds.filter(id => id !== contentId);
-        
-        if (availableEpisodes.length > 0) {
-            const randomIndex = Math.floor(Math.random() * availableEpisodes.length);
-            const randomEpisodeId = availableEpisodes[randomIndex];
-            videos.push(new PlatformVideo({
-                id: new PlatformID(PLATFORM_NAME, PLATFORM_LINK, randomEpisodeId),
-                name: "🎲 Random Episode",
-                url: `https://app.adventuresinodyssey.com/content/${randomEpisodeId}`,
-                thumbnails: new Thumbnails([
-                    new Thumbnail("https://d23sy43gbewnpt.cloudfront.net/public%2Fimages%2Fcontent_body%2Fmobile-random.jpeg", 128)
-                ]),
-                author: PLATFORM_AUTHOR,
-                duration: 0,
-                viewCount: 0
-            }));
-        }
-    }
-}
-
   // Add this episode's navigation/album/recommendations/extras
   for (const item of uniqueCombined) {
     videos.push(new PlatformVideo({
@@ -644,10 +669,7 @@ source.getContentDetails = function(url) {
   }
 
   return new VideoPager(videos, false, null);
-};
-
-  return details;
-};
+}
 
 source.getPlaylist = function(url) {
   const contentGroupId = url.split('/').pop();

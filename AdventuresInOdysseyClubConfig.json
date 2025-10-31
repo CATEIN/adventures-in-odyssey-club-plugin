@@ -6,14 +6,14 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 13,
+    "version": 14,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
     "scriptPublicKey": "",
     "packages": ["Http"],
     "allowEval": false,
-    "allowUrls": ["fotf.my.site.com", "media.adventuresinodyssey.com"],
+    "allowUrls": ["fotf.my.site.com"],
     "authentication": {
       "loginUrl": "https://app.adventuresinodyssey.com/signin",
       "domainHeadersToFind": { 
@@ -96,6 +96,15 @@
       }
       ],
     "changelog": {
+        "14" : [
+            "Direct media URLs now:",
+            "- Display AiOC image instead of nothing",
+            "- Show URL in description",
+            "- Random episode in description (if setting enabled)",
+            "Description now includes image links",
+            "Show additional info now includes signed_cookie",
+            "Removed from allowUrls media.adventuresinodyssey.com (not needed)"
+        ],
         "13" : [
             "hotfix for support for direct media urls"
         ],
