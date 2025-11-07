@@ -3,7 +3,7 @@
     "description": "Subscription service for the award-winning, original audio drama series enjoyed by the whole family.",
     "author": "CATEIN",
     "authorUrl": "https://catein.xyz",
-    "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
+    "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/test/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
     "version": 14,
@@ -160,4 +160,5 @@
     }
 
   }
+
   
