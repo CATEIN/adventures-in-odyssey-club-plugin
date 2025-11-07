@@ -6,7 +6,7 @@
     "sourceUrl": "https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-club-plugin/refs/heads/main/AdventuresInOdysseyClubConfig.json",
     "repositoryUrl": "https://github.com/CATEIN/adventures-in-odyssey-club-plugin",
     "scriptUrl": "./AIOScript.js",
-    "version": 14,
+    "version": 15,
     "iconUrl": "./AIOC.png",
     "id": "62e186ef-160d-46d7-9953-74fe84d11b40",
     "scriptSignature": "",
@@ -23,6 +23,13 @@
       "loginWarning": "You must select a profile with a PIN for authentication to complete."
     },
     "settings": [
+        {
+          "variable": "aioActivity",
+          "name": "Send Activity",
+          "description": "Send content progress to the club (requires login)",
+          "type": "Boolean",
+          "default": "false"
+        },
         {
             "variable": "podcasts",
             "name": "Podcasts",
@@ -44,7 +51,7 @@
             "type": "Boolean",
             "default": "false",
             "dependency": "fetchRandomEpisode"
-		},
+		    },
         {
             "variable": "groupings",
             "name": "Content Groupings",
@@ -96,6 +103,10 @@
       }
       ],
     "changelog": {
+        "15" : [
+            "Added playback tracker support",
+            "Added Send Activity setting"
+        ],
         "14" : [
             "Direct media URLs now:",
             "- Display AiOC image instead of nothing",
@@ -142,20 +153,6 @@
             "Another small lil update",
             "Changed EpisodeHomePage endpoint again to one that gives both video and audio content",
             "Support for badge content (loads the first content id in the badge)"
-        ],
-        "6" : [
-            "Small lil update",
-            "Changed EpisodeHomePage API url to one the club might like better",
-            "Loading comments might show toast messages when searching for a page maybe?",
-            "Added themes support - issue #2 on github",
-            "Added weird video URL support - issue #3 on github"
-        ],
-        "5" : [
-            "Comment Update!",
-            "Finding comments should now use less requests",
-            "Replies now show up",
-            "Added setting for comment page size",
-            "Increased EpisodeHomePage size to 30 instead of 25"
         ]
     }
 

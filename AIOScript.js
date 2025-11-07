@@ -3,6 +3,7 @@ const PLATFORM_NAME = "Adventures In Odyssey Club"
 const PLATFORM_LINK = "app.adventuresinodyssey.com"
 const BANNER_URL = "https://www.adventuresinodyssey.com/wp-content/uploads/whits-end-adventures-in-odyssey.jpg"
 const PLATFORM_CHANNEL_LOGO = "https://app.adventuresinodyssey.com/icons/Icon-167.png"
+const restrictedAlbums = ["Family Portraits", "The Officer Harley Collection", "#00: The Lost Episodes", "The Truth Chronicles"];
 
 const PLATFORM_AUTHOR = new PlatformAuthorLink(
   new PlatformID(PLATFORM_NAME, PLATFORM_LINK),
@@ -52,7 +53,6 @@ function cacheEpisodeIds(fasterRandom = false) {
 
     // Extract episode IDs from all albums
     const episodeIds = [];
-    const restrictedAlbums = ["Family Portraits", "The Officer Harley Collection", "#00: The Lost Episodes", "The Truth Chronicles"];
     
     if (albumsData && albumsData.contentGroupings) {
       albumsData.contentGroupings.forEach(album => {
@@ -349,7 +349,6 @@ source.getContentDetails = function(url) {
       throw new UnavailableException('Invalid signed cookie format');
     }
     
-    // Normalize the URL to full format if it's a relative path
     let fullUrl = url;
     
     // Extract filename from URL
@@ -357,8 +356,6 @@ source.getContentDetails = function(url) {
     
     // Append the cookie parameters to the original URL
     const authenticatedUrl = fullUrl + '?' + cookieParams;
-    
-    // Create audio source descriptor with authenticated URL
     const sourceDescriptor = new UnMuxVideoSourceDescriptor(
       [],
       [
@@ -1205,9 +1202,6 @@ class AIOComment extends Comment {
   }
 }
 
-/**
- * Pager for AIO comment replies (when replies are pre-loaded)
- */
 class AIOReplyPager extends CommentPager {
   constructor(allResults, pageSize = 60) {
     const end = Math.min(pageSize, allResults.length);
@@ -1552,3 +1546,85 @@ source.getComments = function(url, continuationToken) {
     return new AIOCommentPager([], false, { url, pageNumber: 1 });
   }
 };
+
+source.getPlaybackTracker = function(url) {
+  // Only enable playback tracking if user is logged in and setting is enabled
+  if (!bridge.isLoggedIn() || !local_settings.aioActivity) {
+    return null;
+  }
+
+  // Extract content ID from URL
+  let contentId;
+  if (url.startsWith('https://app.adventuresinodyssey.com/video?')) {
+    contentId = new URLSearchParams(url.split('?')[1]).get('id');
+  } else if (url.includes('/contentGroup/') && url.includes('/content/')) {
+    const parts = url.split('/');
+    const contentIndex = parts.indexOf('content');
+    if (contentIndex !== -1 && contentIndex < parts.length - 1) {
+      contentId = parts[contentIndex + 1];
+    } else {
+      contentId = url.split('/').pop();
+    }
+  } else {
+    contentId = url.split('/').pop();
+  }
+
+  if (!contentId) {
+    log("Could not extract content ID from URL for playback tracking");
+    return null;
+  }
+
+  log(`Creating playback tracker for content ID: ${contentId}`);
+  return new AIOPlaybackTracker(contentId);
+};
+
+class AIOPlaybackTracker extends PlaybackTracker {
+  constructor(contentId) {
+    super(15 * 1000); // Update every 15 seconds
+    this.contentId = contentId;
+  }
+
+  onInit(seconds) {
+    // Track initial playback start
+    this.trackProgress(Math.floor(seconds * 1000), "In Progress");
+  }
+
+  onProgress(seconds, isPlaying) {
+    if (!isPlaying || seconds === 0) {
+      return;
+    }
+    // Update progress during playback
+    this.trackProgress(Math.floor(seconds * 1000), "In Progress");
+  }
+
+  onConcluded() {
+    // Mark as complete when playback finishes
+    this.trackProgress(0, "Complete");
+  }
+
+  trackProgress(currentProgress, status) {
+    try {
+      const payload = {
+        content_id: this.contentId,
+        status: status,
+        current_progress: currentProgress
+      };
+
+      log(`Tracking progress: ${status} at ${currentProgress}s for ${this.contentId}`);
+
+      const response = http.requestWithBody(
+        "PUT",
+        "https://fotf.my.site.com/aio/services/apexrest/v1/content",
+        JSON.stringify(payload),
+        aioheaders,
+        true
+      );
+
+      if (!response.isOk) {
+        log(`Failed to track progress: ${response.code} - ${response.statusMessage}`);
+      }
+    } catch (e) {
+      log(`Error tracking progress: ${e.message}`);
+    }
+  }
+}
