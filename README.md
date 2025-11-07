@@ -5,18 +5,26 @@ install link: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-clu
 
 ![qr code](https://github.com/CATEIN/adventures-in-odyssey-club-plugin/blob/main/qr.png?raw=true)
 
+## Note for logged in users
+Currently there is no way to automaticly get a new auth token. When it expires, you should get a LoginRequired exception error thrown.
+To get a new token, either:
+
+- Login by selecting Login on a LoginRequiredException.
+- Going to plugin settings and logging out and in again.
+
+# Features
+
 | Feature                             | Functional? | Note                              |
 |-------------------------------------|-------------|-----------------------------------|
 | Play Audio/Videos                   | Yes         |   Episode art is cropped cuz of grayjay                             |
 | Play Radio Episodes                   | Yes         |       |
 | Audio/Video Description | Yes         |             |
-| Reccomendations/In Album                  | Yes        |   Fully Functional       |
+| Reccomendations/In Album                  | Yes        |          |
 | Randomizer                 | Yes        |   via setting      |
 |  Club Playlists/Content Groupings |Yes        |           |
 |  Themes | Yes       |           |
-|  Grayjay Playlists | Yes          |   |
-|  Grayjay Queue | Yes          |   |
-|  Search | Yes          | only as good as the club search      |
+|  Search | Yes          |      |
+|  Send activity | Yes          | via setting     |
 |  Subscribing | Yes          |           |
 |  Home Page | Yes          |           |
 |  Chromecast | Yes          |             |
@@ -28,10 +36,4 @@ install link: https://raw.githubusercontent.com/CATEIN/adventures-in-odyssey-clu
 | Comment | No         |  No grayjay support yet         |
 | Comics     | No          | Might be implemented... |
 
-## Note for logged in users
-Currently there is no way to automaticly get a new auth token. When it expires, you should get a LoginRequired exception error thrown.
-To get a new token, either:
-
-- Login by selecting Login on a LoginRequiredException.
-- Going to plugin settings and logging out and in again.
 
