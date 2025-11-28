@@ -31,8 +31,8 @@ To get a new token, either:
 | View Comments | Yes          |           |
 | View Comment Replies | Yes          |   |
 |  Search Filters | No          | Might be implemented..             |
-|  Downloads | No          | Gives 401 error, should be fixed in next grayjay update https://gitlab.futo.org/videostreaming/grayjay/-/merge_requests/141        |
-|  F Cast | No          | Gives 401 error, should be fixed in next grayjay update https://github.com/futo-org/grayjay-android/commit/d578c47975e5bb25be1078278e5b90dbf86ce39c         |
+|  Downloads | Partially          | Playlists give 401 error, downloading content manually works        |
+|  F Cast | Yes          |         |
 | Comment | No         |  No grayjay support yet         |
 | Comics     | No          | Might be implemented... |
 
