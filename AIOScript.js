@@ -29,6 +29,15 @@ source.enable = function (conf, settings) {
   
 }
 
+function getBitrateFromUrl(url) {
+  // Match something like 256Kbps, 128Kbps, 64Kbps, etc.
+  const match = url.match(/(\d+)\s*Kbps/i);
+  if (!match) return null; // No bitrate found
+
+  const kbps = parseInt(match[1], 10);
+  return kbps * 1000; // Convert to bits per second
+}
+
 function cacheEpisodeIds(fasterRandom = false) {
   if (cachedEpisodeIds !== null) {
     return cachedEpisodeIds; // Already cached
@@ -252,10 +261,24 @@ function toPlatformPlaylist(rec) {
   const averageEpisodeDurationMs = 23 * 60 * 1000; // 23 minutes in milliseconds
   const videoCount = Math.round(totalRuntimeMs / averageEpisodeDurationMs);
 
-  const baseUrl = (rec.column3?.value === "Badge" || rec.column3?.value === "Adventure")
-  ? "https://app.adventuresinodyssey.com/badges/"
-  : "https://app.adventuresinodyssey.com/contentGroup/";
+  const column1Label = rec.column1?.label;
+  const isTheme = column1Label === "Topic Name";
 
+  // Determine the appropriate base URL based on the type
+  const getBaseUrl = () => {
+    const column3Value = rec.column3?.value;
+
+    if (isTheme) {
+      return "https://app.adventuresinodyssey.com/themes/";
+    }
+    if (column3Value === "Badge" || column3Value === "Adventure") {
+      return "https://app.adventuresinodyssey.com/badges/";
+    }
+    return "https://app.adventuresinodyssey.com/contentGroup/";
+  };
+
+  const baseName = rec.column1?.value || "Untitled";
+  const displayName = isTheme ? `Theme - ${baseName}` : baseName;
 
   return new PlatformPlaylist({
     id: new PlatformID(
@@ -263,18 +286,16 @@ function toPlatformPlaylist(rec) {
       PLATFORM_LINK,
       rec.id
     ),
-    name: rec.column1?.value || "Untitled",
+    name: displayName,
     thumbnail: rec.column2?.value || "",
     author: PLATFORM_AUTHOR,
-    url: `${baseUrl}${rec.id}`,
+    url: `${getBaseUrl()}${rec.id}`,
     videoCount: videoCount
   });
 }
 
 function toPlatformVideo(rec) {
-  const baseUrl = rec.column3?.value === "Adventure" 
-    ? "https://app.adventuresinodyssey.com/badges/" 
-    : "https://app.adventuresinodyssey.com/content/";
+  const baseUrl = "https://app.adventuresinodyssey.com/content/";
   
   // Format name with episode number
   const episodeName = rec.column1?.value || "Untitled";
@@ -308,6 +329,7 @@ source.isContentDetailsUrl = function(url) {
            (url.startsWith('https://app.adventuresinodyssey.com/') && 
             url.includes('/contentGroup/') && 
             url.includes('/content/')) ||
+            url.startsWith('https://media.adventuresinodyssey.com/private/video/episode') ||
             url.startsWith('https://media.adventuresinodyssey.com/private/audio/episode');
   };
 
@@ -324,60 +346,108 @@ source.getContentDetails = function(url) {
   let contentId;
   let contentGroupingId = null;
 
-   // Check if this is a direct media URL
-  if (url.startsWith('https://media.adventuresinodyssey.com/private/audio/')) {
-    log("Direct media URL detected");
-    
-    // Direct media URLs require login
-    if (!bridge.isLoggedIn()) {
-      throw new ScriptLoginRequiredException("Login required to access direct media URLs");
-    }
-    
-    // Use the fixed API URL to get the signed cookie
-    const apiUrl = 'https://fotf.my.site.com/aio/services/apexrest/v1/content/a354W0000046V5fQAE?tag=true&series=true&recommendations=true&player=true&parent=true';
-    data = fetchWithErrorHandling(apiUrl, aioheaders);
-    
-    if (!data.signed_cookie) {
-      throw new UnavailableException('No signed cookie found for direct media URL');
-    }
-    
-    // Extract cookie parameters from signed_cookie
-    // Format: https://media.adventuresinodyssey.com/private/audio/episode/*?Policy=...&Signature=...&Key-Pair-Id=...
-    const cookieParams = data.signed_cookie.split('*?')[1];
-    
-    if (!cookieParams) {
-      throw new UnavailableException('Invalid signed cookie format');
-    }
+  // Check if this is a direct media URL (audio or video)
+  const isAudioUrl = url.startsWith('https://media.adventuresinodyssey.com/private/audio/episode');
+  const isVideoUrl = url.startsWith('https://media.adventuresinodyssey.com/private/video/episode');
+  
+  if (isAudioUrl || isVideoUrl) {
+    log(`Direct media URL detected: ${isVideoUrl ? 'video' : 'audio'}`);
     
     let fullUrl = url;
+    let authenticatedUrl;
+    
+    // Check if URL already has cookie parameters
+    const urlObj = new URL(url);
+    const hasPolicy = urlObj.searchParams.has('Policy');
+    const hasSignature = urlObj.searchParams.has('Signature');
+    const hasKeyPairId = urlObj.searchParams.has('Key-Pair-Id');
+    const hasCookie = hasPolicy && hasSignature && hasKeyPairId;
+    
+    if (hasCookie) {
+      log("URL already has authentication cookie, using provided parameters");
+      authenticatedUrl = url;
+    } else {
+      log("No cookie found in URL, fetching new one");
+      
+      // Direct media URLs require login
+      if (!bridge.isLoggedIn()) {
+        throw new ScriptLoginRequiredException("Login required to access direct media URLs");
+      }
+      
+      // Use the appropriate API URL based on media type
+      const apiContentId = isVideoUrl ? 'a354W0000046SHtQAM' : 'a354W0000046V5fQAE';
+      const apiUrl = `https://fotf.my.site.com/aio/services/apexrest/v1/content/${apiContentId}?tag=true&series=true&recommendations=true&player=true&parent=true`;
+      data = fetchWithErrorHandling(apiUrl, aioheaders);
+      
+      if (!data.signed_cookie) {
+        throw new UnavailableException('No signed cookie found for direct media URL');
+      }
+      
+      // Extract cookie parameters from signed_cookie
+      // Format: https://media.adventuresinodyssey.com/private/audio/episode/*?Policy=...&Signature=...&Key-Pair-Id=...
+      const cookieParams = data.signed_cookie.split('*?')[1];
+      
+      if (!cookieParams) {
+        throw new UnavailableException('Invalid signed cookie format');
+      }
+      
+      // Append the cookie parameters to the original URL
+      authenticatedUrl = fullUrl + '?' + cookieParams;
+    }
     
     // Extract filename from URL
     const filename = fullUrl.split('/').pop().split('?')[0]; // Get filename without query params
+    const bitrate = getBitrateFromUrl(url);
     
-    // Append the cookie parameters to the original URL
-    const authenticatedUrl = fullUrl + '?' + cookieParams;
-    const sourceDescriptor = new UnMuxVideoSourceDescriptor(
-      [],
-      [
-        new AudioUrlSource({
-          name: filename,
-          duration: 0,
-          url: authenticatedUrl,
-          requestModifier: {
-            headers: {
-              "Sec-Fetch-Dest": "audio",
-              "range": "-",
+    let sourceDescriptor;
+    
+    if (isVideoUrl) {
+      // Create video source descriptor
+      sourceDescriptor = new UnMuxVideoSourceDescriptor(
+        [
+          new VideoUrlSource({
+            name: filename,
+            bitrate: bitrate || 2500000,
+            duration: 0,
+            url: authenticatedUrl,
+            width: 1920,
+            height: 1080,
+            requestModifier: {
+              headers: {
+                "Sec-Fetch-Dest": "video",
+                "range": "-",
+              }
             }
-          }
-        })
-      ]
-    );
+          })
+        ],
+        []
+      );
+    } else {
+      // Create audio source descriptor
+      sourceDescriptor = new UnMuxVideoSourceDescriptor(
+        [],
+        [
+          new AudioUrlSource({
+            name: filename,
+            bitrate: bitrate || 256000,
+            duration: 0,
+            url: authenticatedUrl,
+            requestModifier: {
+              headers: {
+                "Sec-Fetch-Dest": "audio",
+                "range": "-",
+              }
+            }
+          })
+        ]
+      );
+    }
     
     const details = new PlatformVideoDetails({
       id: new PlatformID(PLATFORM_NAME, PLATFORM_NAME, "direct_media"),
       thumbnails: new Thumbnails([
-      new Thumbnail(PLATFORM_CHANNEL_LOGO || "", 128)
-    ]),
+        new Thumbnail(PLATFORM_CHANNEL_LOGO || "", 128)
+      ]),
       author: PLATFORM_AUTHOR,
       name: filename,
       uploadDate: 0,
@@ -470,12 +540,14 @@ source.getContentDetails = function(url) {
 
   // Create the appropriate source descriptor based on content type
   let sourceDescriptor;
+  const bitrate = getBitrateFromUrl(data.download_url);
   if (data.type === "Audio") {
     sourceDescriptor = new UnMuxVideoSourceDescriptor(
       [], // No video sources for audio content
       [
         new AudioUrlSource({
           name: data.short_name,
+          bitrate: bitrate || 256000,
           duration: data.media_length / 1000,
           url: data.download_url,
           requestModifier: {
@@ -492,6 +564,7 @@ source.getContentDetails = function(url) {
     sourceDescriptor = new VideoSourceDescriptor([
       new VideoUrlSource({
         name: data.short_name,
+        bitrate: bitrate || 256000,
         url: (data.stream_url && data.download_url && data.stream_url.length > data.download_url.length)
           ? data.stream_url 
           : data.download_url,
@@ -759,8 +832,8 @@ source.getPlaylist = function(url) {
 
 source.search = (query, type) => {
   try {
-    // Build payload with larger page size
-    const payload = {
+    // Build payload for main search
+    const searchPayload = {
       searchTerm: query,
       searchObjects: [
         {
@@ -780,23 +853,56 @@ source.search = (query, type) => {
           pageNumber: 1,
           pageSize: 30,
           fields: ["Name", "Icon__c", "Type__c"]
+        },
+        {
+          objectName: "Topic__c",
+          pageNumber: 1,
+          pageSize: 30,
+          fields: ["Name"]
         }
       ]
     };
 
-    const data = fetchWithErrorHandling(
-      "https://fotf.my.site.com/aio/services/apexrest/v1/search",
-      aioheaders,
-      "POST",
-      payload
-    );
+    const isLoggedIn = bridge.isLoggedIn();
+    let mainSearchData;
+    let contentGroupingData = null;
 
-    log("Search response received successfully");
+    if (isLoggedIn) {
+      // Build payload for content grouping search
+      const contentGroupingPayload = {
+        name: query,
+        community: "Adventures in Odyssey",
+        pageNumber: 1,
+        pageSize: 50
+      };
+
+      // Perform both requests simultaneously
+      const batchResults = http.batch()
+        .POST("https://fotf.my.site.com/aio/services/apexrest/v1/search", JSON.stringify(searchPayload), aioheaders, false)
+        .POST("https://fotf.my.site.com/aio/services/apexrest/v1/contentgrouping/search", JSON.stringify(contentGroupingPayload), aioheaders, true)
+        .execute();
+
+      log("Both search requests completed");
+
+      mainSearchData = JSON.parse(batchResults[0].body);
+      contentGroupingData = JSON.parse(batchResults[1].body);
+    } else {
+      // Only perform main search if not logged in
+      const data = fetchWithErrorHandling(
+        "https://fotf.my.site.com/aio/services/apexrest/v1/search",
+        aioheaders,
+        "POST",
+        searchPayload
+      );
+      mainSearchData = data;
+      log("Main search completed (not logged in)");
+    }
 
     const convertToPlatform = function (rec, section) {
       switch (section.objectName) {
         case "Badge__c":
         case "Content_Grouping__c":
+        case "Topic__c":
           return toPlatformPlaylist(rec);
         case "Content__c":
         default:
@@ -809,7 +915,8 @@ source.search = (query, type) => {
     const videos = [];
     const badges = [];
 
-    for (const section of data.resultObjects || []) {
+    // Process main search results
+    for (const section of mainSearchData.resultObjects || []) {
       log(`Processing section: ${section.objectName} with ${section.results?.length || 0} results`);
 
       for (const rec of section.results || []) {
@@ -819,11 +926,40 @@ source.search = (query, type) => {
           playlists.push(platformItem);
         } else if (section.objectName === "Badge__c") {
           badges.push(platformItem);
+        } else if (section.objectName === "Topic__c") {
+          playlists.push(platformItem);
         } else {
           videos.push(platformItem);
         }
 
         log(`Added ${section.objectName}: ${platformItem.name}`);
+      }
+    }
+
+    // Process content grouping search results (only if logged in)
+    if (isLoggedIn && contentGroupingData && contentGroupingData.contentGroupings) {
+      log(`Processing ${contentGroupingData.contentGroupings.length} content groupings from dedicated search`);
+      
+      for (const grouping of contentGroupingData.contentGroupings) {
+        // Convert to the format expected by toPlatformPlaylist
+        const rec = {
+          id: grouping.id,
+          column1: {
+            value: grouping.name,
+            label: grouping.type === "Theme" ? "Topic Name" : "Name"
+          },
+          column2: {
+            value: grouping.imageURL
+          },
+          column3: {
+            value: grouping.total_runtime
+          }
+        };
+
+        const section = { objectName: "Content_Grouping__c" };
+        const platformItem = convertToPlatform(rec, section);
+        playlists.push(platformItem);
+        log(`Added content grouping: ${platformItem.name}`);
       }
     }
 
